@@ -1,0 +1,633 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		04DC04AB3057BAF900AE3DF2 /* Ban_Phim_Tieng_TrungApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04DC04AA3057BAF900AE3DF2 /* Ban_Phim_Tieng_TrungApp.swift */; };
+		04DC04AD3057BAF900AE3DF2 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04DC04AC3057BAF900AE3DF2 /* ContentView.swift */; };
+		04DC04AF3057BAFA00AE3DF2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 04DC04AE3057BAFA00AE3DF2 /* Assets.xcassets */; };
+		04DC04B23057BAFA00AE3DF2 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 04DC04B13057BAFA00AE3DF2 /* Preview Assets.xcassets */; };
+		B10000000000000000000101 /* VoiceEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001 /* VoiceEngine.swift */; };
+		B10000000000000000000102 /* Translator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* Translator.swift */; };
+		B10000000000000000000110 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000010 /* SharedModels.swift */; };
+		B10000000000000000000111 /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* SharedStore.swift */; };
+		B10000000000000000000120 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000020 /* KeyboardViewController.swift */; };
+		B10000000000000000000121 /* KeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000021 /* KeyboardView.swift */; };
+		B10000000000000000000122 /* KeyboardModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000022 /* KeyboardModel.swift */; };
+		B10000000000000000000130 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000010 /* SharedModels.swift */; };
+		B10000000000000000000131 /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* SharedStore.swift */; };
+		B10000000000000000000140 /* BanPhimTrungKeyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B10000000000000000000025 /* BanPhimTrungKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B10000000000000000000103 /* PracticeModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000006 /* PracticeModel.swift */; };
+		B10000000000000000000104 /* PracticeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* PracticeView.swift */; };
+		B10000000000000000000105 /* phrases.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* phrases.json */; };
+		B10000000000000000000106 /* NaturalSpeaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* NaturalSpeaker.swift */; };
+		B10000000000000000000107 /* VoiceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* VoiceSettingsView.swift */; };
+		B10000000000000000000108 /* ChinesePinyin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* ChinesePinyin.swift */; };
+		B10000000000000000000109 /* pinyin-dict.json in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000C /* pinyin-dict.json */; };
+		B10000000000000000000112 /* RubyText.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* RubyText.swift */; };
+		B10000000000000000000132 /* RubyText.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* RubyText.swift */; };
+		B10000000000000000000133 /* ChinesePinyin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* ChinesePinyin.swift */; };
+		B10000000000000000000134 /* Translator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* Translator.swift */; };
+		B10000000000000000000135 /* pinyin-dict.json in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000C /* pinyin-dict.json */; };
+		B10000000000000000000113 /* PhraseMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* PhraseMatcher.swift */; };
+		B10000000000000000000136 /* PhraseMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* PhraseMatcher.swift */; };
+		B10000000000000000000137 /* NaturalSpeaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* NaturalSpeaker.swift */; };
+		B1000000000000000000010A /* hanviet.json in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* hanviet.json */; };
+		B10000000000000000000138 /* hanviet.json in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* hanviet.json */; };
+		B10000000000000000000139 /* replies.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000026 /* replies.json */; };
+		B1000000000000000000010B /* SpeechCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000E /* SpeechCapture.swift */; };
+		B1000000000000000000010C /* ConversationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000F /* ConversationModel.swift */; };
+		B1000000000000000000010D /* ConversationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000014 /* ConversationView.swift */; };
+		B1000000000000000000010E /* scenarios.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000015 /* scenarios.json */; };
+		B1000000000000000000010F /* OpenAIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000016 /* OpenAIClient.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B10000000000000000000205 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 04DC049F3057BAF800AE3DF2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B10000000000000000000200;
+			remoteInfo = BanPhimTrungKeyboard;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B10000000000000000000204 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B10000000000000000000140 /* BanPhimTrungKeyboard.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		04DC04A73057BAF900AE3DF2 /* Ban Phim Tieng Trung.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Ban Phim Tieng Trung.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		04DC04AA3057BAF900AE3DF2 /* Ban_Phim_Tieng_TrungApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ban_Phim_Tieng_TrungApp.swift; sourceTree = "<group>"; };
+		04DC04AC3057BAF900AE3DF2 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		04DC04AE3057BAFA00AE3DF2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		04DC04B13057BAFA00AE3DF2 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		B10000000000000000000001 /* VoiceEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceEngine.swift; sourceTree = "<group>"; };
+		B10000000000000000000002 /* Translator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Translator.swift; sourceTree = "<group>"; };
+		B10000000000000000000004 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B10000000000000000000005 /* Ban Phim Tieng Trung.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Ban Phim Tieng Trung.entitlements"; sourceTree = "<group>"; };
+		B10000000000000000000010 /* SharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedModels.swift; sourceTree = "<group>"; };
+		B10000000000000000000011 /* SharedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedStore.swift; sourceTree = "<group>"; };
+		B10000000000000000000020 /* KeyboardViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardViewController.swift; sourceTree = "<group>"; };
+		B10000000000000000000021 /* KeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardView.swift; sourceTree = "<group>"; };
+		B10000000000000000000022 /* KeyboardModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardModel.swift; sourceTree = "<group>"; };
+		B10000000000000000000023 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B10000000000000000000024 /* BanPhimTrungKeyboard.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BanPhimTrungKeyboard.entitlements; sourceTree = "<group>"; };
+		B10000000000000000000025 /* BanPhimTrungKeyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BanPhimTrungKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10000000000000000000006 /* PracticeModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeModel.swift; sourceTree = "<group>"; };
+		B10000000000000000000007 /* PracticeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeView.swift; sourceTree = "<group>"; };
+		B10000000000000000000008 /* phrases.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = phrases.json; sourceTree = "<group>"; };
+		B10000000000000000000009 /* NaturalSpeaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NaturalSpeaker.swift; sourceTree = "<group>"; };
+		B1000000000000000000000A /* VoiceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSettingsView.swift; sourceTree = "<group>"; };
+		B1000000000000000000000B /* ChinesePinyin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChinesePinyin.swift; sourceTree = "<group>"; };
+		B1000000000000000000000C /* pinyin-dict.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "pinyin-dict.json"; sourceTree = "<group>"; };
+		B10000000000000000000012 /* RubyText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RubyText.swift; sourceTree = "<group>"; };
+		B10000000000000000000013 /* PhraseMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhraseMatcher.swift; sourceTree = "<group>"; };
+		B1000000000000000000000D /* hanviet.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = hanviet.json; sourceTree = "<group>"; };
+		B10000000000000000000026 /* replies.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = replies.json; sourceTree = "<group>"; };
+		B1000000000000000000000E /* SpeechCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechCapture.swift; sourceTree = "<group>"; };
+		B1000000000000000000000F /* ConversationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationModel.swift; sourceTree = "<group>"; };
+		B10000000000000000000014 /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
+		B10000000000000000000015 /* scenarios.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = scenarios.json; sourceTree = "<group>"; };
+		B10000000000000000000016 /* OpenAIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIClient.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		04DC04A43057BAF800AE3DF2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B10000000000000000000202 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		04DC049E3057BAF800AE3DF2 = {
+			isa = PBXGroup;
+			children = (
+				04DC04A93057BAF900AE3DF2 /* Ban Phim Tieng Trung */,
+				B10000000000000000000030 /* Shared */,
+				B10000000000000000000031 /* BanPhimTrungKeyboard */,
+				04DC04A83057BAF900AE3DF2 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		04DC04A83057BAF900AE3DF2 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				04DC04A73057BAF900AE3DF2 /* Ban Phim Tieng Trung.app */,
+				B10000000000000000000025 /* BanPhimTrungKeyboard.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		04DC04A93057BAF900AE3DF2 /* Ban Phim Tieng Trung */ = {
+			isa = PBXGroup;
+			children = (
+				04DC04AA3057BAF900AE3DF2 /* Ban_Phim_Tieng_TrungApp.swift */,
+				04DC04AC3057BAF900AE3DF2 /* ContentView.swift */,
+				B10000000000000000000001 /* VoiceEngine.swift */,
+				B10000000000000000000002 /* Translator.swift */,
+				B1000000000000000000000B /* ChinesePinyin.swift */,
+				B1000000000000000000000C /* pinyin-dict.json */,
+				B1000000000000000000000D /* hanviet.json */,
+				B10000000000000000000006 /* PracticeModel.swift */,
+				B10000000000000000000007 /* PracticeView.swift */,
+				B1000000000000000000000E /* SpeechCapture.swift */,
+				B1000000000000000000000F /* ConversationModel.swift */,
+				B10000000000000000000014 /* ConversationView.swift */,
+				B10000000000000000000016 /* OpenAIClient.swift */,
+				B10000000000000000000015 /* scenarios.json */,
+				B10000000000000000000009 /* NaturalSpeaker.swift */,
+				B1000000000000000000000A /* VoiceSettingsView.swift */,
+				B10000000000000000000008 /* phrases.json */,
+				04DC04AE3057BAFA00AE3DF2 /* Assets.xcassets */,
+				B10000000000000000000004 /* Info.plist */,
+				B10000000000000000000005 /* Ban Phim Tieng Trung.entitlements */,
+				04DC04B03057BAFA00AE3DF2 /* Preview Content */,
+			);
+			path = "Ban Phim Tieng Trung";
+			sourceTree = "<group>";
+		};
+		04DC04B03057BAFA00AE3DF2 /* Preview Content */ = {
+			isa = PBXGroup;
+			children = (
+				04DC04B13057BAFA00AE3DF2 /* Preview Assets.xcassets */,
+			);
+			path = "Preview Content";
+			sourceTree = "<group>";
+		};
+		B10000000000000000000030 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000010 /* SharedModels.swift */,
+				B10000000000000000000011 /* SharedStore.swift */,
+				B10000000000000000000012 /* RubyText.swift */,
+				B10000000000000000000013 /* PhraseMatcher.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000031 /* BanPhimTrungKeyboard */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000020 /* KeyboardViewController.swift */,
+				B10000000000000000000021 /* KeyboardView.swift */,
+				B10000000000000000000022 /* KeyboardModel.swift */,
+				B10000000000000000000023 /* Info.plist */,
+				B10000000000000000000024 /* BanPhimTrungKeyboard.entitlements */,
+				B10000000000000000000026 /* replies.json */,
+			);
+			path = BanPhimTrungKeyboard;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		04DC04A63057BAF800AE3DF2 /* Ban Phim Tieng Trung */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 04DC04B53057BAFA00AE3DF2 /* Build configuration list for PBXNativeTarget "Ban Phim Tieng Trung" */;
+			buildPhases = (
+				04DC04A33057BAF800AE3DF2 /* Sources */,
+				04DC04A43057BAF800AE3DF2 /* Frameworks */,
+				04DC04A53057BAF800AE3DF2 /* Resources */,
+				B10000000000000000000204 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B10000000000000000000206 /* PBXTargetDependency */,
+			);
+			name = "Ban Phim Tieng Trung";
+			productName = "Ban Phim Tieng Trung";
+			productReference = 04DC04A73057BAF900AE3DF2 /* Ban Phim Tieng Trung.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B10000000000000000000200 /* BanPhimTrungKeyboard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B10000000000000000000207 /* Build configuration list for PBXNativeTarget "BanPhimTrungKeyboard" */;
+			buildPhases = (
+				B10000000000000000000201 /* Sources */,
+				B10000000000000000000202 /* Frameworks */,
+				B10000000000000000000203 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BanPhimTrungKeyboard;
+			productName = BanPhimTrungKeyboard;
+			productReference = B10000000000000000000025 /* BanPhimTrungKeyboard.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		04DC049F3057BAF800AE3DF2 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1540;
+				LastUpgradeCheck = 1540;
+				TargetAttributes = {
+					04DC04A63057BAF800AE3DF2 = {
+						CreatedOnToolsVersion = 15.4;
+					};
+					B10000000000000000000200 = {
+						CreatedOnToolsVersion = 15.4;
+					};
+				};
+			};
+			buildConfigurationList = 04DC04A23057BAF800AE3DF2 /* Build configuration list for PBXProject "Ban Phim Tieng Trung" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 04DC049E3057BAF800AE3DF2;
+			productRefGroup = 04DC04A83057BAF900AE3DF2 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				04DC04A63057BAF800AE3DF2 /* Ban Phim Tieng Trung */,
+				B10000000000000000000200 /* BanPhimTrungKeyboard */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		04DC04A53057BAF800AE3DF2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				04DC04B23057BAFA00AE3DF2 /* Preview Assets.xcassets in Resources */,
+				04DC04AF3057BAFA00AE3DF2 /* Assets.xcassets in Resources */,
+				B10000000000000000000105 /* phrases.json in Resources */,
+				B10000000000000000000109 /* pinyin-dict.json in Resources */,
+				B1000000000000000000010A /* hanviet.json in Resources */,
+				B1000000000000000000010E /* scenarios.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B10000000000000000000203 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000135 /* pinyin-dict.json in Resources */,
+				B10000000000000000000138 /* hanviet.json in Resources */,
+				B10000000000000000000139 /* replies.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		04DC04A33057BAF800AE3DF2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				04DC04AD3057BAF900AE3DF2 /* ContentView.swift in Sources */,
+				04DC04AB3057BAF900AE3DF2 /* Ban_Phim_Tieng_TrungApp.swift in Sources */,
+				B10000000000000000000101 /* VoiceEngine.swift in Sources */,
+				B10000000000000000000102 /* Translator.swift in Sources */,
+				B10000000000000000000108 /* ChinesePinyin.swift in Sources */,
+				B10000000000000000000112 /* RubyText.swift in Sources */,
+				B10000000000000000000113 /* PhraseMatcher.swift in Sources */,
+				B10000000000000000000103 /* PracticeModel.swift in Sources */,
+				B10000000000000000000104 /* PracticeView.swift in Sources */,
+				B1000000000000000000010B /* SpeechCapture.swift in Sources */,
+				B1000000000000000000010C /* ConversationModel.swift in Sources */,
+				B1000000000000000000010D /* ConversationView.swift in Sources */,
+				B1000000000000000000010F /* OpenAIClient.swift in Sources */,
+				B10000000000000000000106 /* NaturalSpeaker.swift in Sources */,
+				B10000000000000000000107 /* VoiceSettingsView.swift in Sources */,
+				B10000000000000000000110 /* SharedModels.swift in Sources */,
+				B10000000000000000000111 /* SharedStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B10000000000000000000201 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10000000000000000000120 /* KeyboardViewController.swift in Sources */,
+				B10000000000000000000121 /* KeyboardView.swift in Sources */,
+				B10000000000000000000122 /* KeyboardModel.swift in Sources */,
+				B10000000000000000000130 /* SharedModels.swift in Sources */,
+				B10000000000000000000131 /* SharedStore.swift in Sources */,
+				B10000000000000000000132 /* RubyText.swift in Sources */,
+				B10000000000000000000133 /* ChinesePinyin.swift in Sources */,
+				B10000000000000000000134 /* Translator.swift in Sources */,
+				B10000000000000000000136 /* PhraseMatcher.swift in Sources */,
+				B10000000000000000000137 /* NaturalSpeaker.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B10000000000000000000206 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B10000000000000000000200 /* BanPhimTrungKeyboard */;
+			targetProxy = B10000000000000000000205 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		04DC04B33057BAFA00AE3DF2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		04DC04B43057BAFA00AE3DF2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		04DC04B63057BAFA00AE3DF2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Ban Phim Tieng Trung/Ban Phim Tieng Trung.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"Ban Phim Tieng Trung/Preview Content\"";
+				DEVELOPMENT_TEAM = 5G537NZ6R8;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Ban Phim Tieng Trung/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Bàn Phím Trung";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Micro dùng để ghi âm giọng nói khi bạn nhấn 🎙 trên Bàn Phím Trung.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Nhận dạng giọng nói để chuyển lời nói thành chữ, sau đó dịch sang tiếng Trung.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "hihi.Ban-Phim-Tieng-Trung";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		04DC04B73057BAFA00AE3DF2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Ban Phim Tieng Trung/Ban Phim Tieng Trung.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"Ban Phim Tieng Trung/Preview Content\"";
+				DEVELOPMENT_TEAM = 5G537NZ6R8;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Ban Phim Tieng Trung/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "Bàn Phím Trung";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Micro dùng để ghi âm giọng nói khi bạn nhấn 🎙 trên Bàn Phím Trung.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Nhận dạng giọng nói để chuyển lời nói thành chữ, sau đó dịch sang tiếng Trung.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "hihi.Ban-Phim-Tieng-Trung";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		B10000000000000000000208 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = BanPhimTrungKeyboard/BanPhimTrungKeyboard.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5G537NZ6R8;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BanPhimTrungKeyboard/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Bàn Phím Trung";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "hihi.Ban-Phim-Tieng-Trung.Keyboard";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B10000000000000000000209 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = BanPhimTrungKeyboard/BanPhimTrungKeyboard.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5G537NZ6R8;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = BanPhimTrungKeyboard/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Bàn Phím Trung";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "hihi.Ban-Phim-Tieng-Trung.Keyboard";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		04DC04A23057BAF800AE3DF2 /* Build configuration list for PBXProject "Ban Phim Tieng Trung" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				04DC04B33057BAFA00AE3DF2 /* Debug */,
+				04DC04B43057BAFA00AE3DF2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		04DC04B53057BAFA00AE3DF2 /* Build configuration list for PBXNativeTarget "Ban Phim Tieng Trung" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				04DC04B63057BAFA00AE3DF2 /* Debug */,
+				04DC04B73057BAFA00AE3DF2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B10000000000000000000207 /* Build configuration list for PBXNativeTarget "BanPhimTrungKeyboard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B10000000000000000000208 /* Debug */,
+				B10000000000000000000209 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 04DC049F3057BAF800AE3DF2 /* Project object */;
+}

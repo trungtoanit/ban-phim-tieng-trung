@@ -1,0 +1,322 @@
+[
+ {
+  "id": 1,
+  "topic": "Chào hỏi & làm quen",
+  "title": "Làm quen bạn cùng lớp",
+  "partnerRole": "Bạn cùng lớp",
+  "partnerEmoji": "🧑‍🎓",
+  "userRole": "Học viên mới"
+ },
+ {
+  "id": 2,
+  "topic": "Chào hỏi & làm quen",
+  "title": "Gặp hàng xóm mới",
+  "partnerRole": "Hàng xóm",
+  "partnerEmoji": "👵",
+  "userRole": "Người mới chuyển đến"
+ },
+ {
+  "id": 3,
+  "topic": "Cảm ơn, xin lỗi & lịch sự",
+  "title": "Đến muộn buổi hẹn",
+  "partnerRole": "Bạn bè",
+  "partnerEmoji": "🧑",
+  "userRole": "Người đến muộn"
+ },
+ {
+  "id": 4,
+  "topic": "Cảm ơn, xin lỗi & lịch sự",
+  "title": "Va phải người trên tàu điện ngầm",
+  "partnerRole": "Hành khách",
+  "partnerEmoji": "👨‍💼",
+  "userRole": "Hành khách"
+ },
+ {
+  "id": 5,
+  "topic": "Hỏi thăm & cảm xúc",
+  "title": "Hỏi thăm bạn bị ốm",
+  "partnerRole": "Bạn cùng phòng",
+  "partnerEmoji": "🤒",
+  "userRole": "Bạn cùng phòng"
+ },
+ {
+  "id": 6,
+  "topic": "Hỏi thăm & cảm xúc",
+  "title": "Chia sẻ tin vui",
+  "partnerRole": "Đồng nghiệp",
+  "partnerEmoji": "😄",
+  "userRole": "Đồng nghiệp"
+ },
+ {
+  "id": 7,
+  "topic": "Gia đình & bạn bè",
+  "title": "Xem ảnh gia đình",
+  "partnerRole": "Bạn học",
+  "partnerEmoji": "👩",
+  "userRole": "Bạn học"
+ },
+ {
+  "id": 8,
+  "topic": "Gia đình & bạn bè",
+  "title": "Hẹn bạn cũ họp lớp",
+  "partnerRole": "Bạn cũ",
+  "partnerEmoji": "🧑‍🤝‍🧑",
+  "userRole": "Bạn học cũ"
+ },
+ {
+  "id": 9,
+  "topic": "Thời gian & ngày tháng",
+  "title": "Hẹn bạn đi xem phim",
+  "partnerRole": "Bạn thân",
+  "partnerEmoji": "🧑",
+  "userRole": "Bạn"
+ },
+ {
+  "id": 10,
+  "topic": "Thời gian & ngày tháng",
+  "title": "Hỏi giờ ở văn phòng",
+  "partnerRole": "Đồng nghiệp",
+  "partnerEmoji": "👩‍💼",
+  "userRole": "Nhân viên"
+ },
+ {
+  "id": 11,
+  "topic": "Thời tiết",
+  "title": "Than trời nóng với hàng xóm",
+  "partnerRole": "Hàng xóm",
+  "partnerEmoji": "👵",
+  "userRole": "Hàng xóm"
+ },
+ {
+  "id": 12,
+  "topic": "Thời tiết",
+  "title": "Hỏi thời tiết trước khi đi chơi",
+  "partnerRole": "Lễ tân khách sạn",
+  "partnerEmoji": "🛎️",
+  "userRole": "Khách du lịch"
+ },
+ {
+  "id": 13,
+  "topic": "Ăn uống & nhà hàng",
+  "title": "Gọi món ở quán mì",
+  "partnerRole": "Phục vụ",
+  "partnerEmoji": "🧑‍🍳",
+  "userRole": "Khách"
+ },
+ {
+  "id": 14,
+  "topic": "Ăn uống & nhà hàng",
+  "title": "Thanh toán và gói đồ ăn",
+  "partnerRole": "Phục vụ",
+  "partnerEmoji": "💁",
+  "userRole": "Khách"
+ },
+ {
+  "id": 15,
+  "topic": "Mua sắm & mặc cả",
+  "title": "Mặc cả mua áo ở chợ",
+  "partnerRole": "Chủ sạp",
+  "partnerEmoji": "🛍️",
+  "userRole": "Khách"
+ },
+ {
+  "id": 16,
+  "topic": "Mua sắm & mặc cả",
+  "title": "Mua giày ở trung tâm thương mại",
+  "partnerRole": "Nhân viên bán hàng",
+  "partnerEmoji": "👩‍💼",
+  "userRole": "Khách"
+ },
+ {
+  "id": 17,
+  "topic": "Giao thông & hỏi đường",
+  "title": "Hỏi đường đến ga tàu điện ngầm",
+  "partnerRole": "Người qua đường",
+  "partnerEmoji": "🧑",
+  "userRole": "Người hỏi đường"
+ },
+ {
+  "id": 18,
+  "topic": "Giao thông & hỏi đường",
+  "title": "Đi taxi ra ga tàu",
+  "partnerRole": "Tài xế taxi",
+  "partnerEmoji": "🚕",
+  "userRole": "Hành khách"
+ },
+ {
+  "id": 19,
+  "topic": "Du lịch & khách sạn",
+  "title": "Nhận phòng khách sạn",
+  "partnerRole": "Lễ tân",
+  "partnerEmoji": "💁",
+  "userRole": "Khách"
+ },
+ {
+  "id": 20,
+  "topic": "Du lịch & khách sạn",
+  "title": "Mua vé vào khu tham quan",
+  "partnerRole": "Nhân viên bán vé",
+  "partnerEmoji": "🎫",
+  "userRole": "Du khách"
+ },
+ {
+  "id": 21,
+  "topic": "Công việc & văn phòng",
+  "title": "Ngày đầu đi làm",
+  "partnerRole": "Đồng nghiệp",
+  "partnerEmoji": "👩‍💼",
+  "userRole": "Nhân viên mới"
+ },
+ {
+  "id": 22,
+  "topic": "Công việc & văn phòng",
+  "title": "Xin nghỉ phép",
+  "partnerRole": "Quản lý",
+  "partnerEmoji": "👨‍💼",
+  "userRole": "Nhân viên"
+ },
+ {
+  "id": 23,
+  "topic": "Học tập",
+  "title": "Hỏi bạn về bài tập",
+  "partnerRole": "Bạn cùng lớp",
+  "partnerEmoji": "🧑‍🎓",
+  "userRole": "Sinh viên"
+ },
+ {
+  "id": 24,
+  "topic": "Học tập",
+  "title": "Hỏi giáo viên về phát âm",
+  "partnerRole": "Giáo viên",
+  "partnerEmoji": "👩‍🏫",
+  "userRole": "Học sinh"
+ },
+ {
+  "id": 25,
+  "topic": "Điện thoại & nhắn tin",
+  "title": "Làm sim điện thoại mới",
+  "partnerRole": "Nhân viên nhà mạng",
+  "partnerEmoji": "👩‍💼",
+  "userRole": "Khách"
+ },
+ {
+  "id": 26,
+  "topic": "Điện thoại & nhắn tin",
+  "title": "Gọi lại cuộc gọi nhỡ",
+  "partnerRole": "Bạn cùng lớp",
+  "partnerEmoji": "🙋‍♀️",
+  "userRole": "Bạn"
+ },
+ {
+  "id": 27,
+  "topic": "Sức khỏe & đi khám",
+  "title": "Khám bệnh vì sốt",
+  "partnerRole": "Bác sĩ",
+  "partnerEmoji": "👨‍⚕️",
+  "userRole": "Bệnh nhân"
+ },
+ {
+  "id": 28,
+  "topic": "Sức khỏe & đi khám",
+  "title": "Mua thuốc đau bụng",
+  "partnerRole": "Dược sĩ",
+  "partnerEmoji": "👩‍⚕️",
+  "userRole": "Khách"
+ },
+ {
+  "id": 29,
+  "topic": "Sở thích & giải trí",
+  "title": "Trò chuyện về sở thích",
+  "partnerRole": "Bạn mới quen",
+  "partnerEmoji": "🧑",
+  "userRole": "Bạn"
+ },
+ {
+  "id": 30,
+  "topic": "Sở thích & giải trí",
+  "title": "Rủ đi hát sau giờ làm",
+  "partnerRole": "Đồng nghiệp",
+  "partnerEmoji": "🎤",
+  "userRole": "Bạn"
+ },
+ {
+  "id": 31,
+  "topic": "Hẹn gặp & kế hoạch",
+  "title": "Hẹn đi ăn lẩu cuối tuần",
+  "partnerRole": "Bạn thân",
+  "partnerEmoji": "😊",
+  "userRole": "Bạn"
+ },
+ {
+  "id": 32,
+  "topic": "Hẹn gặp & kế hoạch",
+  "title": "Lên kế hoạch du lịch nghỉ lễ",
+  "partnerRole": "Bạn cùng phòng",
+  "partnerEmoji": "🧳",
+  "userRole": "Bạn"
+ },
+ {
+  "id": 33,
+  "topic": "Nhà cửa & sinh hoạt",
+  "title": "Đi xem phòng thuê",
+  "partnerRole": "Chủ nhà",
+  "partnerEmoji": "🏠",
+  "userRole": "Người thuê"
+ },
+ {
+  "id": 34,
+  "topic": "Nhà cửa & sinh hoạt",
+  "title": "Dọn nhà cuối tuần",
+  "partnerRole": "Bạn cùng phòng",
+  "partnerEmoji": "🧹",
+  "userRole": "Bạn"
+ },
+ {
+  "id": 35,
+  "topic": "Tiền bạc & thanh toán",
+  "title": "Thanh toán ở siêu thị",
+  "partnerRole": "Thu ngân",
+  "partnerEmoji": "🧾",
+  "userRole": "Khách"
+ },
+ {
+  "id": 36,
+  "topic": "Tiền bạc & thanh toán",
+  "title": "Trả tiền sau bữa ăn",
+  "partnerRole": "Bạn bè",
+  "partnerEmoji": "🍲",
+  "userRole": "Bạn"
+ },
+ {
+  "id": 37,
+  "topic": "Khen ngợi, động viên & an ủi",
+  "title": "An ủi bạn thi không tốt",
+  "partnerRole": "Bạn thân",
+  "partnerEmoji": "😔",
+  "userRole": "Bạn"
+ },
+ {
+  "id": 38,
+  "topic": "Khen ngợi, động viên & an ủi",
+  "title": "Khen đồng nghiệp sau buổi thuyết trình",
+  "partnerRole": "Đồng nghiệp",
+  "partnerEmoji": "👩‍💼",
+  "userRole": "Đồng nghiệp"
+ },
+ {
+  "id": 39,
+  "topic": "Câu cửa miệng & phản hồi nhanh",
+  "title": "Rủ nhau đi ăn lẩu",
+  "partnerRole": "Bạn bè",
+  "partnerEmoji": "🙋",
+  "userRole": "Bạn"
+ },
+ {
+  "id": 40,
+  "topic": "Câu cửa miệng & phản hồi nhanh",
+  "title": "Giúp đồng nghiệp sửa máy in",
+  "partnerRole": "Đồng nghiệp",
+  "partnerEmoji": "🧑‍💻",
+  "userRole": "Đồng nghiệp"
+ }
+]
