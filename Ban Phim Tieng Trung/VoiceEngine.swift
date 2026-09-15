@@ -71,6 +71,12 @@ final class VoiceEngine: ObservableObject {
     /// Mỗi ký tự (không tính khoảng trắng) của câu nghe được: máy có kém chắc chắn không.
     private var latestUncertain: [Bool] = []
     private var latestAlternatives: [String] = []
+    private var liveWork: DispatchWorkItem?
+    /// Câu tiếng Việt (hoặc tiếng Trung) đã được dịch trực tiếp gần nhất.
+    private var liveSource = ""
+    private var liveInFlight = false
+    /// Câu tiếng Việt ứng với `state.liveChinese` đang hiện (có thể cũ hơn `liveSource` khi yêu cầu mới chưa về).
+    private var liveTranslatedSource = ""
     private var polite = false
     private var finalizedRequestID: UUID?
     private var lastCommandKey = ""
@@ -273,6 +279,8 @@ final class VoiceEngine: ObservableObject {
         state.requestID = requestID
         state.mode = mode
         state.partialText = ""
+        state.liveChinese = ""
+        state.liveWords = []
         state.sourceText = ""
         state.chineseText = ""
         state.pinyin = ""
@@ -332,6 +340,8 @@ final class VoiceEngine: ObservableObject {
         state.phase = .idle
         state.requestID = nil
         state.partialText = ""
+        state.liveChinese = ""
+        state.liveWords = []
         state.level = 0
         publish()
     }
@@ -345,6 +355,65 @@ final class VoiceEngine: ObservableObject {
         latestTranscript = ""
         latestUncertain = []
         latestAlternatives = []
+        liveWork?.cancel()
+        liveWork = nil
+        liveSource = ""
+        liveInFlight = false
+        liveTranslatedSource = ""
+    }
+
+    // MARK: - Dịch trực tiếp
+
+    /// Chờ một chút sau mỗi lần nghe thêm chữ rồi mới dịch, để không gửi yêu cầu cho từng âm tiết.
+    private func scheduleLiveTranslation(requestID: UUID) {
+        liveWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.translateLive(requestID: requestID)
+        }
+        liveWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+    }
+
+    private func translateLive(requestID: UUID) {
+        guard state.requestID == requestID, state.phase == .listening else { return }
+        let source = state.partialText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !source.isEmpty, source != liveSource else { return }
+
+        // Nói thẳng tiếng Trung: chỉ cần hiện pinyin, không phải dịch.
+        guard let sourceCode = state.mode.sourceLanguageCode else {
+            liveSource = source
+            state.liveWords = ChineseText.words(for: source)
+            publish()
+            return
+        }
+        // Mỗi lúc chỉ một yêu cầu; xong sẽ tự dịch lại nếu người dùng đã nói thêm.
+        guard !liveInFlight else { return }
+        liveInFlight = true
+        liveSource = source
+
+        let liveTarget = script.translateCode
+        let livePolite = polite
+        Task {
+            let translated = try? await Translator.translate(source, from: sourceCode, to: liveTarget)
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.liveInFlight = false
+                guard self.state.requestID == requestID,
+                      self.state.phase == .listening || self.state.phase == .processing,
+                      self.state.chineseText.isEmpty
+                else { return }
+                if let translated {
+                    let text = ChineseRegister.apply(translated, polite: livePolite)
+                    self.state.liveChinese = text
+                    self.state.liveWords = ChineseText.words(for: text)
+                    self.liveTranslatedSource = source
+                    self.publish()
+                }
+                if self.state.phase == .listening {
+                    self.translateLive(requestID: requestID)
+                }
+            }
+        }
     }
 
     private func handleRecognition(result: SFSpeechRecognitionResult?, error: Error?, requestID: UUID) {
@@ -356,9 +425,10 @@ final class VoiceEngine: ObservableObject {
                 latestUncertain = Self.uncertainCharacters(in: result.bestTranscription)
                 latestAlternatives = result.transcriptions.dropFirst().prefix(4).map(\.formattedString)
             }
-            if state.phase == .listening {
+            if state.phase == .listening, state.partialText != latestTranscript {
                 state.partialText = latestTranscript
                 publish()
+                scheduleLiveTranslation(requestID: requestID)
             }
             if result.isFinal {
                 finish(text: latestTranscript, requestID: requestID)
@@ -391,6 +461,11 @@ final class VoiceEngine: ObservableObject {
 
         guard let sourceCode = state.mode.sourceLanguageCode else {
             deliver(chinese: source, requestID: requestID, uncertain: latestUncertain, alternatives: latestAlternatives)
+            return
+        }
+        // Câu cuối trùng câu vừa dịch trực tiếp: chèn luôn, khỏi chờ dịch lại.
+        if source == liveTranslatedSource, !state.liveChinese.isEmpty {
+            deliver(chinese: state.liveChinese, requestID: requestID)
             return
         }
         let target = script.translateCode
@@ -432,6 +507,8 @@ final class VoiceEngine: ObservableObject {
     private func deliver(chinese: String, requestID: UUID, uncertain: [Bool] = [], alternatives: [String] = []) {
         guard requestID == state.requestID else { return }
         state.chineseText = chinese
+        state.liveChinese = ""
+        state.liveWords = []
         state.pinyinWords = ChineseText.words(for: chinese)
         if uncertain.contains(true) {
             var index = 0

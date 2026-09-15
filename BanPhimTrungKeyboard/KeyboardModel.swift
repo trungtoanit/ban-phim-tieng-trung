@@ -59,8 +59,9 @@ final class KeyboardModel: ObservableObject {
         case needsActivation
         case openingApp
         case ready
-        case listening(text: String, level: Float)
-        case processing(text: String)
+        /// `live`: tiếng Trung (kèm pinyin) hiện ngay trong lúc đang nói.
+        case listening(text: String, level: Float, live: [PinyinWord])
+        case processing(text: String, live: [PinyinWord])
         case result(words: [PinyinWord], chinese: String, source: String)
         case error(String)
         /// Tin nhắn tiếng Trung đã copy: pinyin + nghĩa (nil khi đang dịch) + gợi ý trả lời.
@@ -153,9 +154,9 @@ final class KeyboardModel: ObservableObject {
             }
             switch state.phase {
             case .listening:
-                return .listening(text: state.partialText, level: state.level)
+                return .listening(text: state.partialText, level: state.level, live: state.liveWords)
             case .processing:
-                return .processing(text: state.partialText)
+                return .processing(text: state.partialText, live: state.liveWords)
             case .result:
                 let words = correctedWords ?? state.pinyinWords
                 return .result(words: words, chinese: words.map(\.zh).joined(), source: state.sourceText)
@@ -185,6 +186,13 @@ final class KeyboardModel: ObservableObject {
     }
 
     var canSave: Bool { saveable != nil }
+
+    /// Đọc to câu tiếng Trung đang hiện để nghe thử trước khi gửi.
+    func speakCurrent() {
+        guard let zh = saveable?.zh, !zh.isEmpty else { return }
+        haptic.impactOccurred()
+        NaturalSpeaker.chinese.speak(zh)
+    }
 
     var isCurrentSaved: Bool {
         guard let zh = saveable?.zh else { return false }

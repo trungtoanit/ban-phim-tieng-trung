@@ -530,6 +530,9 @@ struct VoiceState: Codable, Equatable {
     var chineseText = ""
     var pinyin = ""
     var pinyinWords: [PinyinWord] = []
+    /// Dịch trực tiếp trong lúc đang nói: tiếng Trung tạm (chế độ VI→中) và pinyin từng từ.
+    var liveChinese = ""
+    var liveWords: [PinyinWord] = []
     var errorMessage = ""
     var level: Float = 0
 

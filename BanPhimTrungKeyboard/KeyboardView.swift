@@ -117,16 +117,22 @@ struct KeyboardView: View {
             message("arrow.up.forward.app", "Đang mở app… Nếu app không tự mở, hãy mở “Bàn Phím Trung” và nhấn “Bật micro ngay”.")
         case .ready:
             message("waveform", "Nhấn 🎙 và nói \(model.mode.spokenLanguageName). Copy tin tiếng Trung rồi nhấn 📋 để hiểu nghĩa. Chạm vào từ để nghe phát âm.")
-        case let .listening(text, level):
-            HStack(spacing: 10) {
+        case let .listening(text, level, live):
+            HStack(alignment: .top, spacing: 10) {
                 LevelBars(level: level)
-                Text(text.isEmpty ? "Đang nghe… hãy nói \(model.mode.spokenLanguageName)" : text)
-                    .font(.system(size: 15))
-                    .foregroundColor(text.isEmpty ? .secondary : .primary)
-                    .lineLimit(3)
+                    .padding(.top, 4)
+                liveTranscript(text: text, live: live)
             }
-        case let .processing(text):
-            progress(model.mode == .chinese ? "Đang xử lý…" : "Đang dịch sang tiếng Trung…", text)
+        case let .processing(text, live):
+            if live.isEmpty {
+                progress(model.mode == .chinese ? "Đang xử lý…" : "Đang dịch sang tiếng Trung…", text)
+            } else {
+                HStack(alignment: .top, spacing: 10) {
+                    ProgressView()
+                        .padding(.top, 4)
+                    liveTranscript(text: text, live: live)
+                }
+            }
         case let .translatingTyped(source):
             progress("Đang dịch chữ đã gõ…", source)
         case let .result(words, chinese, source):
@@ -172,6 +178,39 @@ struct KeyboardView: View {
         }
     }
 
+    /// Vừa nói vừa hiện: tiếng Việt máy đang nghe (nhỏ) và tiếng Trung dịch tạm kèm pinyin (lớn).
+    private func liveTranscript(text: String, live: [PinyinWord]) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 4) {
+                    if text.isEmpty {
+                        Text("Đang nghe… hãy nói \(model.mode.spokenLanguageName)")
+                            .font(.system(size: 15))
+                            .foregroundColor(.secondary)
+                    } else if live.isEmpty || model.mode != .chinese {
+                        Text(text)
+                            .font(.system(size: live.isEmpty ? 15 : 12))
+                            .foregroundColor(live.isEmpty ? .primary : .secondary)
+                    }
+                    if !live.isEmpty {
+                        RubyText(
+                            words: live,
+                            hanziSize: rubySize(for: live.map(\.zh).joined()),
+                            pinyinColor: .secondary,
+                            showHanViet: model.showHanViet
+                        )
+                        .opacity(0.85)
+                    }
+                    Color.clear.frame(height: 1).id("live-bottom")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .onChange(of: live) { _ in
+                withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo("live-bottom", anchor: .bottom) }
+            }
+        }
+    }
+
     private func ruby(_ words: [PinyinWord]) -> some View {
         RubyText(
             words: words,
@@ -193,6 +232,15 @@ struct KeyboardView: View {
                     closeButton(close)
                 }
                 if model.canSave {
+                    Button {
+                        model.speakCurrent()
+                    } label: {
+                        Image(systemName: "speaker.wave.2.fill")
+                            .font(.system(size: 18))
+                            .foregroundColor(KeyColors.brand)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Nghe thử câu tiếng Trung trước khi gửi")
                     Button {
                         model.saveCurrent()
                     } label: {
@@ -433,7 +481,7 @@ struct MicButton: View {
     let action: () -> Void
 
     private var level: Float? {
-        if case let .listening(_, level) = display { return level }
+        if case let .listening(_, level, _) = display { return level }
         return nil
     }
 
