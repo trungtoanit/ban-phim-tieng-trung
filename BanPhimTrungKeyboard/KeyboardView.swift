@@ -180,22 +180,18 @@ struct KeyboardView: View {
         }
     }
 
-    /// Nghĩa tiếng Việt của câu tiếng Trung vừa nói — người đọc tin nhắn sẽ hiểu như vậy.
+    /// Nghĩa tiếng Việt của câu tiếng Trung vừa nói.
+    @ViewBuilder
     private func meaningLine(_ meaning: String?) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 4) {
-            Text("Người đọc sẽ hiểu:")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(KeyColors.brand)
-            if let meaning {
-                Text(meaning)
-                    .font(.system(size: 13))
-                    .foregroundColor(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Text("đang dịch…")
-                    .font(.system(size: 12))
-                    .foregroundColor(.secondary)
-            }
+        if let meaning {
+            Text(meaning)
+                .font(.system(size: 13))
+                .foregroundColor(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text("Đang dịch…")
+                .font(.system(size: 12))
+                .foregroundColor(.secondary)
         }
     }
 
