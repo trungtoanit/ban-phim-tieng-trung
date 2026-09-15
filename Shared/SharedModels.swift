@@ -484,6 +484,16 @@ enum SharedSettings {
     static let politeKey = "politeRegister"
     static let speechPaceKey = "speechPace"
     static let pendingVoiceStartKey = "pendingVoiceStart"
+    static let keyboardVoiceModeKey = "keyboardVoiceMode"
+    static let keyboardReadingSelectedKey = "keyboardReadingSelected"
+    static let keyboardLastReadingKey = "keyboardLastReading"
+
+    /// Tin nhắn đã copy được đọc gần nhất trên bàn phím, để mở lại bàn phím vẫn thấy.
+    struct LastReading: Codable {
+        let message: String
+        let meaning: String
+        let failed: Bool
+    }
 
     static var store: UserDefaults {
         UserDefaults(suiteName: AppGroup.identifier) ?? .standard
@@ -496,7 +506,10 @@ enum SharedSettings {
 
     static var polite: Bool {
         get { store.object(forKey: politeKey) as? Bool ?? false }
-        set { store.set(newValue, forKey: politeKey) }
+        set {
+            store.set(newValue, forKey: politeKey)
+            store.synchronize()
+        }
     }
 
     /// Người dùng chạm micro lúc app chưa sẵn sàng. Lưu lại ý định đó để khi app bật
@@ -506,6 +519,33 @@ enum SharedSettings {
     static var pendingVoiceStart: Date? {
         get { store.object(forKey: pendingVoiceStartKey) as? Date }
         set { store.set(newValue, forKey: pendingVoiceStartKey) }
+    }
+
+    // Nút người dùng chọn trên thanh bàn phím, nhớ cho lần mở sau. Ghi xuống đĩa ngay vì
+    // iOS có thể dẹp tiến trình bàn phím bất cứ lúc nào, trước khi UserDefaults kịp tự lưu.
+
+    static var keyboardVoiceMode: VoiceMode? {
+        get { store.string(forKey: keyboardVoiceModeKey).flatMap(VoiceMode.init(rawValue:)) }
+        set {
+            store.set(newValue?.rawValue, forKey: keyboardVoiceModeKey)
+            store.synchronize()
+        }
+    }
+
+    static var keyboardReadingSelected: Bool {
+        get { store.bool(forKey: keyboardReadingSelectedKey) }
+        set {
+            store.set(newValue, forKey: keyboardReadingSelectedKey)
+            store.synchronize()
+        }
+    }
+
+    static var keyboardLastReading: LastReading? {
+        get { store.data(forKey: keyboardLastReadingKey).flatMap { try? JSONDecoder().decode(LastReading.self, from: $0) } }
+        set {
+            store.set(newValue.flatMap { try? JSONEncoder().encode($0) }, forKey: keyboardLastReadingKey)
+            store.synchronize()
+        }
     }
 
     static var speechPace: SpeechPace {

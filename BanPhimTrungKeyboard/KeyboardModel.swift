@@ -113,7 +113,11 @@ final class KeyboardModel: ObservableObject {
         didSet { SharedSettings.polite = polite }
     }
     @Published var mode: VoiceMode {
-        didSet { UserDefaults.standard.set(mode.rawValue, forKey: "voiceMode") }
+        didSet { SharedSettings.keyboardVoiceMode = mode }
+    }
+    /// Đang chọn nút "Hiểu tin" — nhớ lại để lần sau mở bàn phím vẫn thấy tin vừa đọc.
+    @Published private(set) var readingSelected = SharedSettings.keyboardReadingSelected {
+        didSet { SharedSettings.keyboardReadingSelected = readingSelected }
     }
 
     weak var controller: KeyboardViewController?
@@ -130,7 +134,9 @@ final class KeyboardModel: ObservableObject {
     private var lastPasteboardChange = UIPasteboard.general.changeCount
 
     init() {
-        mode = VoiceMode(rawValue: UserDefaults.standard.string(forKey: "voiceMode") ?? "") ?? .vietnamese
+        mode = SharedSettings.keyboardVoiceMode
+            ?? VoiceMode(rawValue: UserDefaults.standard.string(forKey: "voiceMode") ?? "")
+            ?? .vietnamese
     }
 
     var display: Display {
@@ -218,6 +224,9 @@ final class KeyboardModel: ObservableObject {
         showHanViet = SharedSettings.showHanViet
         if polite != SharedSettings.polite { polite = SharedSettings.polite }
         savedChinese = Set(SharedStore.savedPhrases().map(\.zh))
+        if readingSelected, panel == nil {
+            restoreLastReading()
+        }
 
         DarwinNotifier.shared.observe(DarwinName.state) { [weak self] in
             self?.refresh()
@@ -278,6 +287,7 @@ final class KeyboardModel: ObservableObject {
         guard hasFullAccess else { return }
         haptic.impactOccurred()
         closePanels()
+        readingSelected = false
         correctedWords = nil
         correctedMeaning = nil
 
@@ -325,6 +335,10 @@ final class KeyboardModel: ObservableObject {
 
     func select(_ newMode: VoiceMode) {
         mode = newMode
+        if readingSelected {
+            readingSelected = false
+            closePanels()
+        }
     }
 
     private func send(_ action: VoiceCommand.Action, requestID: UUID) {
@@ -337,6 +351,7 @@ final class KeyboardModel: ObservableObject {
         guard hasFullAccess else { return }
         haptic.impactOccurred()
         closePanels()
+        readingSelected = true
 
         let pasteboard = UIPasteboard.general
         lastPasteboardChange = pasteboard.changeCount
@@ -363,6 +378,7 @@ final class KeyboardModel: ObservableObject {
                 self?.updateReading(token: token) { info in
                     info.meaning = meaning ?? "Không dịch được nghĩa — kiểm tra kết nối mạng."
                     info.failed = meaning == nil
+                    SharedSettings.keyboardLastReading = .init(message: message, meaning: info.meaning ?? "", failed: info.failed)
                 }
             }
         }
@@ -372,6 +388,30 @@ final class KeyboardModel: ObservableObject {
                 self?.updateReading(token: token) { $0.replies = replies }
             }
         }
+    }
+
+    /// Mở lại bàn phím khi đang ở tab "Hiểu tin": hiện lại tin đã đọc lần trước, không đọc clipboard
+    /// (tránh iOS hỏi quyền dán mỗi lần mở bàn phím).
+    private func restoreLastReading() {
+        guard let last = SharedSettings.keyboardLastReading, !last.message.isEmpty else { return }
+        let token = UUID()
+        panelToken = token
+        panel = .reading(ReadingInfo(
+            words: ChineseText.words(for: last.message), message: last.message,
+            meaning: last.meaning, failed: last.failed
+        ))
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let replies = QuickReplyStore.shared.replies(for: last.message)
+            DispatchQueue.main.async {
+                self?.updateReading(token: token) { $0.replies = replies }
+            }
+        }
+    }
+
+    /// Người dùng tự đóng thẻ (nút ✕): bỏ chọn "Hiểu tin".
+    func dismissPanel() {
+        readingSelected = false
+        closePanels()
     }
 
     private func updateReading(token: UUID, _ change: (inout ReadingInfo) -> Void) {
@@ -395,6 +435,7 @@ final class KeyboardModel: ObservableObject {
         guard hasFullAccess, let controller else { return }
         haptic.impactOccurred()
         closePanels()
+        readingSelected = false
 
         let original = controller.textBeforeCursor
         let source = original.trimmingCharacters(in: .whitespacesAndNewlines)

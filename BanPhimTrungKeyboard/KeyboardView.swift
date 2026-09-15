@@ -37,7 +37,7 @@ struct KeyboardView: View {
     private var modeBar: some View {
         HStack(spacing: 5) {
             ForEach(VoiceMode.allCases) { mode in
-                chip(mode.label, selected: model.mode == mode) { model.select(mode) }
+                chip(mode.label, selected: model.mode == mode && !model.readingSelected) { model.select(mode) }
             }
             clipboardButton
             chip(model.polite ? "您 Lịch sự" : "你 Thân mật", selected: false, outlined: model.polite) {
@@ -76,8 +76,11 @@ struct KeyboardView: View {
                 .lineLimit(1)
                 .padding(.horizontal, 9)
                 .frame(height: 30)
-                .background(Capsule().strokeBorder(KeyColors.brand, lineWidth: 1.5))
-                .foregroundColor(KeyColors.brand)
+                .background(
+                    Capsule().fill(model.readingSelected ? KeyColors.brand : Color.clear)
+                        .overlay(Capsule().strokeBorder(KeyColors.brand, lineWidth: 1.5))
+                )
+                .foregroundColor(model.readingSelected ? .white : KeyColors.brand)
                 .overlay(alignment: .topTrailing) {
                     if model.clipboardHasNew {
                         Circle()
@@ -152,7 +155,7 @@ struct KeyboardView: View {
                 }
             }
         case let .reading(words, meaning, failed, replies):
-            cardWithActions(close: model.closePanels) {
+            cardWithActions(close: model.dismissPanel) {
                 ruby(words)
                 if let meaning {
                     Text(meaning)
@@ -175,7 +178,7 @@ struct KeyboardView: View {
             HStack(alignment: .top) {
                 message("exclamationmark.triangle.fill", text, tint: .orange)
                 Spacer(minLength: 0)
-                closeButton(model.closePanels)
+                closeButton(model.dismissPanel)
             }
         }
     }
