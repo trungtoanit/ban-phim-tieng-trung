@@ -4,17 +4,29 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct RubyText: View {
     let words: [PinyinWord]
     var hanziSize: CGFloat = 20
     var hanziWeight: Font.Weight = .medium
     var pinyinColor: Color = .secondary
+    /// Màu chữ Hán khi từ không bị đánh dấu — đổi được để dùng ở dải "đang nghe".
+    var hanziColor: Color = .primary
     var showHanViet = SharedSettings.showHanViet
+    /// Tô xanh những từ đã đọc đúng. Chỉ bật khi đang chấm trực tiếp lúc đọc;
+    /// chỗ khác `flagged == false` chỉ có nghĩa "không sao", không phải "vừa đọc đúng".
+    var showsCorrect = false
     /// Chạm vào một từ (nghe phát âm, xem nghĩa).
     var onTapWord: ((PinyinWord) -> Void)?
 
     private let flaggedColor = Color.red
+    /// Xanh lá đậm trên nền sáng, nhạt hơn trên nền tối cho đủ tương phản.
+    private let correctColor = Color(uiColor: UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0.36, green: 0.84, blue: 0.47, alpha: 1)
+            : UIColor(red: 0.13, green: 0.58, blue: 0.27, alpha: 1)
+    })
 
     var body: some View {
         FlowLayout(spacing: hanziSize * 0.35, lineSpacing: hanziSize * 0.25) {
@@ -27,6 +39,7 @@ struct RubyText: View {
     private func wordView(_ word: PinyinWord) -> some View {
         let parts = Self.splitPunctuation(word.zh)
         let flagged = word.flagged == true
+        let correct = showsCorrect && word.flagged == false
         let hanViet = showHanViet ? word.hv : nil
 
         return HStack(alignment: .top, spacing: 0) {
@@ -34,10 +47,10 @@ struct RubyText: View {
             VStack(spacing: 0) {
                 Text(word.py.trimmingCharacters(in: .punctuationCharacters))
                     .font(.system(size: hanziSize * 0.6))
-                    .foregroundColor(flagged ? flaggedColor : pinyinColor)
+                    .foregroundColor(flagged ? flaggedColor : (correct ? correctColor : pinyinColor))
                 Text(parts.core)
                     .font(.system(size: hanziSize, weight: hanziWeight))
-                    .foregroundColor(flagged ? flaggedColor : .primary)
+                    .foregroundColor(flagged ? flaggedColor : (correct ? correctColor : hanziColor))
                     .underline(flagged, color: flaggedColor)
                 if let hanViet {
                     Text(hanViet)
@@ -48,7 +61,9 @@ struct RubyText: View {
             if !parts.trailing.isEmpty {
                 VStack(spacing: 0) {
                     Text(" ").font(.system(size: hanziSize * 0.6))
-                    Text(parts.trailing).font(.system(size: hanziSize, weight: hanziWeight))
+                    Text(parts.trailing)
+                        .font(.system(size: hanziSize, weight: hanziWeight))
+                        .foregroundColor(flagged ? flaggedColor : (correct ? correctColor : hanziColor))
                 }
             }
         }

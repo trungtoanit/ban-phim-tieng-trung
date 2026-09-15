@@ -10,12 +10,17 @@ import SwiftUI
 enum AppTab: Hashable {
     case practice
     case conversation
+    case sounds
+    case mistakes
     case keyboard
 }
 
 struct ContentView: View {
     @Binding var tab: AppTab
     var openedFromKeyboard = false
+    /// Tổng số lỗi phát âm, hiện thành số đỏ trên tab Sửa lỗi.
+    @StateObject private var mistakes = MistakeStore()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         TabView(selection: $tab) {
@@ -25,11 +30,22 @@ struct ContentView: View {
             ConversationTopicsView()
                 .tabItem { Label("Hội thoại", systemImage: "bubble.left.and.bubble.right.fill") }
                 .tag(AppTab.conversation)
+            SoundsTabView()
+                .tabItem { Label("Phát âm", systemImage: "character.book.closed.fill") }
+                .tag(AppTab.sounds)
+            MistakesTabView()
+                .tabItem { Label("Sửa lỗi", systemImage: "exclamationmark.bubble.fill") }
+                .badge(mistakes.mistakes.count)
+                .tag(AppTab.mistakes)
             KeyboardHomeView(openedFromKeyboard: openedFromKeyboard)
                 .tabItem { Label("Bàn phím", systemImage: "keyboard") }
                 .tag(AppTab.keyboard)
         }
         .tint(Color(red: 0.86, green: 0.17, blue: 0.16))
+        // Bàn phím ghi lỗi từ tiến trình khác, không báo sang được: quay lại app thì đếm lại.
+        .onChange(of: scenePhase) { phase in
+            if phase == .active { mistakes.reload() }
+        }
     }
 }
 

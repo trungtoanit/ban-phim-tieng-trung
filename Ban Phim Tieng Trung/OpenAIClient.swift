@@ -8,19 +8,73 @@
 import Foundation
 import Security
 
+/// Tốc độ nói của AI ở chế độ nói trực tiếp.
+enum RealtimeSpeed: String, CaseIterable, Identifiable {
+    case normal, slow, slower, slowest
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .normal: "Bình thường"
+        case .slow: "Chậm nhẹ"
+        case .slower: "Chậm"
+        case .slowest: "Rất chậm"
+        }
+    }
+
+    /// Chỉ dùng bội của 1/8: những số này biểu diễn đúng trong nhị phân, nếu không
+    /// JSON sẽ ra kiểu 0.90000000000000002 và máy chủ từ chối vì quá 16 chữ số thập phân.
+    var value: Double {
+        switch self {
+        case .normal: 1
+        case .slow: 0.875
+        case .slower: 0.75
+        case .slowest: 0.625
+        }
+    }
+}
+
 enum OpenAISettings {
     static let modelKey = "openAIModel"
+    static let fastModelKey = "openAIFastModel"
     static let levelKey = "conversationLevel"
     static let defaultModel = "gpt-5.6-luna"
+    /// Model cho bước trả lời nhanh (câu nói + nghĩa), nên chọn loại rẻ và nhanh nhất.
+    static let defaultFastModel = "gpt-5.6-luna"
     static let suggestedModels = ["gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol", "gpt-6-astra"]
     static let voiceKey = "openAIVoice"
     static let defaultVoice = "coral"
     static let voices = ["coral", "nova", "shimmer", "sage", "ballad", "marin", "alloy", "verse", "ash", "echo", "fable", "onyx", "cedar"]
+    /// Realtime chỉ nhận bấy nhiêu giọng — nova, fable, onyx chỉ dùng được cho giọng đọc.
+    static let realtimeVoices = ["alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar"]
     static let speechModel = "gpt-4o-mini-tts"
+    static let realtimeModelKey = "openAIRealtimeModel"
+    static let realtimeSpeedKey = "openAIRealtimeSpeed"
+    static let defaultRealtimeModel = "gpt-realtime-2"
+
+    /// Người mới học nghe không kịp tốc độ thường, nên mặc định chậm sẵn.
+    static var realtimeSpeed: RealtimeSpeed {
+        RealtimeSpeed(rawValue: UserDefaults.standard.string(forKey: realtimeSpeedKey) ?? "") ?? .slower
+    }
+
+    /// Model cho chế độ nói trực tiếp (giọng đi thẳng lên model, không qua bước chuyển chữ).
+    static var realtimeModel: String {
+        let stored = UserDefaults.standard.string(forKey: realtimeModelKey)?.trimmingCharacters(in: .whitespaces) ?? ""
+        return stored.isEmpty ? defaultRealtimeModel : stored
+    }
 
     static var voice: String {
         UserDefaults.standard.string(forKey: voiceKey) ?? defaultVoice
     }
+
+    /// Giọng cho chế độ nói trực tiếp; giọng chỉ dành cho đọc văn bản thì lùi về mặc định.
+    static var realtimeVoice: String {
+        let current = voice
+        return realtimeVoices.contains(current) ? current : defaultVoice
+    }
+
+    static func supportsRealtime(voice: String) -> Bool { realtimeVoices.contains(voice) }
 
     private static let keychainService = "hihi.banphimtrung.openai"
     private static let keychainAccount = "apiKey"
@@ -28,6 +82,11 @@ enum OpenAISettings {
     static var model: String {
         let stored = UserDefaults.standard.string(forKey: modelKey)?.trimmingCharacters(in: .whitespaces) ?? ""
         return stored.isEmpty ? defaultModel : stored
+    }
+
+    static var fastModel: String {
+        let stored = UserDefaults.standard.string(forKey: fastModelKey)?.trimmingCharacters(in: .whitespaces) ?? ""
+        return stored.isEmpty ? defaultFastModel : stored
     }
 
     static var apiKey: String? {
@@ -116,7 +175,10 @@ enum OpenAIClient {
             "input": text,
             "voice": OpenAISettings.voice,
             "instructions": instructions,
-            "response_format": "mp3",
+            // Không lấy mp3: máy chủ phát câu nào ghi câu đó, phần đầu file có thể chỉ khai
+            // độ dài của câu đầu, và AVAudioPlayer tin con số đó nên đọc tới dấu chấm là tắt.
+            // PCM thô không có đầu file, tự bọc WAV với độ dài đúng bằng dữ liệu nhận được.
+            "response_format": "pcm",
         ]
 
         var request = URLRequest(url: URL(string: "https://api.openai.com/v1/audio/speech")!)
@@ -133,7 +195,35 @@ enum OpenAIClient {
             let message = (json?["error"] as? [String: Any])?["message"] as? String ?? "Lỗi không xác định"
             throw ClientError.http(status: status, message: message)
         }
-        return data
+        return wav(fromPCM: data)
+    }
+
+    /// PCM của OpenAI: 24 kHz, 16-bit, một kênh, little-endian.
+    private static func wav(fromPCM pcm: Data, sampleRate: UInt32 = 24_000) -> Data {
+        // Lẻ một byte thì bỏ, không thì mẫu cuối lệch nửa và kêu "tách".
+        let samples = pcm.prefix(pcm.count & ~1)
+        let channels: UInt16 = 1
+        let bitsPerSample: UInt16 = 16
+        let blockAlign = channels * bitsPerSample / 8
+        let size = UInt32(samples.count)
+
+        var header = Data()
+        func append<T: FixedWidthInteger>(_ value: T) {
+            withUnsafeBytes(of: value.littleEndian) { header.append(contentsOf: $0) }
+        }
+        header.append(contentsOf: Array("RIFF".utf8))
+        append(36 + size)
+        header.append(contentsOf: Array("WAVEfmt ".utf8))
+        append(UInt32(16))
+        append(UInt16(1)) // PCM
+        append(channels)
+        append(sampleRate)
+        append(sampleRate * UInt32(blockAlign))
+        append(blockAlign)
+        append(bitsPerSample)
+        header.append(contentsOf: Array("data".utf8))
+        append(size)
+        return header + samples
     }
 
     /// Gửi hội thoại và nhận về JSON đúng `schema`, giải mã thành `T`.
@@ -142,7 +232,8 @@ enum OpenAIClient {
         messages: [Message],
         schemaName: String,
         schema: [String: Any],
-        as type: T.Type
+        as type: T.Type,
+        model: String? = nil
     ) async throws -> T {
         guard let key = OpenAISettings.apiKey else { throw ClientError.missingKey }
 
@@ -150,7 +241,7 @@ enum OpenAIClient {
         input += messages.map { ["role": $0.role.rawValue, "content": $0.content] }
 
         let body: [String: Any] = [
-            "model": OpenAISettings.model,
+            "model": model ?? OpenAISettings.model,
             "input": input,
             "text": [
                 "format": [

@@ -63,6 +63,10 @@ final class NaturalSpeaker: NSObject, ObservableObject {
     private var player: AVAudioPlayer?
     private var utterance: AVSpeechUtterance?
     private var completion: (() -> Void)?
+    /// Đọc tới ký tự thứ mấy trong câu, để tô đậm theo lời đọc.
+    private var progressHandler: ((Int) -> Void)?
+    private var progressTimer: Timer?
+    private var spokenCount = 0
     private var generation = 0
     private var audioCache: [String: Data] = [:]
 
@@ -122,13 +126,17 @@ final class NaturalSpeaker: NSObject, ObservableObject {
 
     /// `completion` chỉ chạy khi đọc xong trọn vẹn, không chạy nếu bị `stop()`.
     /// `preferOpenAI`: dùng giọng OpenAI nếu đã có khoá (màn hình hội thoại AI).
-    func speak(_ text: String, preferOpenAI: Bool = false, completion: (() -> Void)? = nil) {
+    /// `progress` nhận số ký tự đã đọc xong, để màn hình tô đậm dần theo lời đọc.
+    func speak(_ text: String, preferOpenAI: Bool = false,
+               progress: ((Int) -> Void)? = nil, completion: (() -> Void)? = nil) {
         for other in Self.all where other !== self {
             other.stop()
         }
         stop()
         generation += 1
         self.completion = completion
+        progressHandler = progress
+        spokenCount = text.count
         activateSession()
 
         let id = preferOpenAI && Self.hasOpenAIVoice()
@@ -143,10 +151,18 @@ final class NaturalSpeaker: NSObject, ObservableObject {
         }
     }
 
+    /// Đang đọc, hoặc đang tải giọng để đọc.
+    var isSpeaking: Bool {
+        player != nil || utterance != nil || completion != nil
+    }
+
     func stop() {
-        let wasSpeaking = player != nil || utterance != nil || completion != nil
+        let wasSpeaking = isSpeaking
         generation += 1
         completion = nil
+        progressHandler = nil
+        progressTimer?.invalidate()
+        progressTimer = nil
         utterance = nil
         player?.stop()
         player = nil
@@ -208,9 +224,9 @@ final class NaturalSpeaker: NSObject, ObservableObject {
             return
         }
         let languageCode = language.googleCode
-        Task { [weak self] in
+        Task {
             let data = try? await synthesize(text, languageCode)
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 guard let self, generation == self.generation else { return }
                 if let data, !data.isEmpty {
                     self.audioCache[cacheKey] = data
@@ -234,15 +250,38 @@ final class NaturalSpeaker: NSObject, ObservableObject {
         player.prepareToPlay()
         self.player = player
         player.play()
+        startProgressTimer()
     }
 
     private func finish() {
         player = nil
         utterance = nil
+        progressTimer?.invalidate()
+        progressTimer = nil
+        // Báo đã đọc trọn câu trước khi đóng, để chữ được tô đậm hết.
+        progressHandler?(spokenCount)
+        progressHandler = nil
         let done = completion
         completion = nil
         deactivateSession()
         done?()
+    }
+
+    /// Giọng thu sẵn (Google, OpenAI) không báo đọc tới đâu, nên suy ra theo thời gian phát.
+    private func startProgressTimer() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.progressTimer?.invalidate()
+            self.progressTimer = nil
+            guard self.progressHandler != nil, self.spokenCount > 0 else { return }
+            let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
+                guard let self, let player = self.player, player.duration > 0 else { return }
+                let ratio = min(max(player.currentTime / player.duration, 0), 1)
+                self.progressHandler?(Int((Double(self.spokenCount) * ratio).rounded()))
+            }
+            RunLoop.main.add(timer, forMode: .common)
+            self.progressTimer = timer
+        }
     }
 
     // MARK: - Audio session
@@ -262,6 +301,16 @@ final class NaturalSpeaker: NSObject, ObservableObject {
 }
 
 extension NaturalSpeaker: AVSpeechSynthesizerDelegate {
+    /// Giọng của máy báo đúng đoạn chữ đang đọc, khỏi phải suy ra theo thời gian.
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
+                           willSpeakRangeOfSpeechString characterRange: NSRange,
+                           utterance: AVSpeechUtterance) {
+        DispatchQueue.main.async {
+            guard utterance === self.utterance else { return }
+            self.progressHandler?(characterRange.location + characterRange.length)
+        }
+    }
+
     func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         DispatchQueue.main.async {
             guard utterance === self.utterance else { return }

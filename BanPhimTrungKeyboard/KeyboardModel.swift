@@ -225,7 +225,7 @@ final class KeyboardModel: ObservableObject {
         if newState != state { state = newState }
         let alive = newState.isAlive
         if alive != appAlive { appAlive = alive }
-        if alive && isOpeningApp { isOpeningApp = false }
+        if alive { resumePendingStart() }
 
         // changeCount không đọc nội dung clipboard nên không làm iOS hiện thông báo dán.
         let pasteboard = UIPasteboard.general
@@ -257,6 +257,8 @@ final class KeyboardModel: ObservableObject {
         correctedWords = nil
 
         guard appAlive else {
+            // Nhớ ý định này lại: mở app xong quay về đây là ghi âm luôn.
+            SharedSettings.pendingVoiceStart = Date()
             isOpeningApp = true
             controller?.openContainingApp()
             return
@@ -267,9 +269,32 @@ final class KeyboardModel: ObservableObject {
         } else if case .processing = display {
             return
         } else {
-            let requestID = UUID()
-            activeRequestID = requestID
-            send(.start, requestID: requestID)
+            beginListening()
+        }
+    }
+
+    private func beginListening() {
+        let requestID = UUID()
+        activeRequestID = requestID
+        send(.start, requestID: requestID)
+    }
+
+    /// Micro đã sẵn sàng: nếu trước đó người dùng chạm micro mà phải đi mở app thì nối lại
+    /// đúng việc họ định làm, thay vì bắt chạm thêm lần nữa.
+    private func resumePendingStart() {
+        isOpeningApp = false
+        guard let pending = SharedSettings.pendingVoiceStart else { return }
+        SharedSettings.pendingVoiceStart = nil
+
+        // Để lâu quá thì người dùng đã quên chuyện này rồi, tự mở micro chỉ làm họ giật mình.
+        guard Date().timeIntervalSince(pending) < 120 else { return }
+        // Đang bận dở việc gì thì đừng chen ngang.
+        switch display {
+        case .ready:
+            haptic.impactOccurred()
+            beginListening()
+        default:
+            return
         }
     }
 
@@ -363,11 +388,21 @@ final class KeyboardModel: ObservableObject {
         let polite = self.polite
 
         Task {
-            let translated = try? await Translator.translate(source, from: "vi", to: "zh-CN")
+            // `let` để closure gửi về luồng chính không bắt biến có thể đổi (lỗi trong Swift 6).
+            let translated: String?
+            let failure: String?
+            do {
+                translated = try await Translator.translate(source, from: "vi", to: "zh-CN")
+                failure = nil
+            } catch {
+                // Nói rõ máy chủ trả gì, nếu không lần nào hỏng cũng chỉ biết đổ cho mạng.
+                translated = nil
+                failure = error.localizedDescription
+            }
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.panelToken == token else { return }
                 guard let translated else {
-                    self.panel = .message("Không dịch được — kiểm tra kết nối mạng.")
+                    self.panel = .message("Không dịch được — \(failure ?? "kiểm tra kết nối mạng").")
                     return
                 }
                 // Chỉ thay khi nội dung ô chat vẫn như lúc bắt đầu dịch.
@@ -440,6 +475,19 @@ final class KeyboardModel: ObservableObject {
         let hanViet = converted.compactMap(\.hv).joined(separator: " ")
         words[index] = PinyinWord(zh: replacement + parts.trailing, py: pinyin + trailingPunctuation,
                                   hv: hanViet.isEmpty ? nil : hanViet)
+
+        // Người dùng chọn lại chữ đúng ý: máy đã nghe thành chữ khác, tức là biết chính xác sai ở đâu.
+        let core = parts.core
+        let heardSentence = chinese
+        PronunciationLog.update { list in
+            list.removeAll { $0.source == .keyboard && $0.isUnclear && $0.zh == core && $0.sentence == heardSentence }
+            list.append(contentsOf: PronunciationAnalyzer.mistakes(target: replacement, heard: core, source: .keyboard)
+                .map { mistake in
+                    var mistake = mistake
+                    mistake.sentence = heardSentence
+                    return mistake
+                })
+        }
 
         correctedWords = words
         lastInserted = words.map(\.zh).joined()

@@ -445,6 +445,11 @@ final class VoiceEngine: ObservableObject {
         if !alternatives.isEmpty {
             state.pinyinWords = PhraseMatcher.markAlternatives(words: state.pinyinWords, alternatives: alternatives)
         }
+        if state.pinyinWords.contains(where: { $0.flagged == true }) {
+            PronunciationLog.record(PronunciationAnalyzer.unclear(
+                words: state.pinyinWords, sentence: chinese, source: .keyboard, context: requestID.uuidString
+            ))
+        }
         state.pinyin = state.pinyinWords.map(\.py).joined(separator: " ")
         state.phase = .result
         lastActivity = Date()

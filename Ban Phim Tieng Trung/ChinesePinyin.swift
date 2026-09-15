@@ -18,7 +18,36 @@ enum ChineseText {
         words(for: text).map(\.py).joined(separator: " ")
     }
 
+    /// Âm tiết của từng chữ Hán theo đúng thứ tự trong câu, đã áp dụng biến điệu 一/不.
+    /// Dùng để so từng chữ câu mẫu với chữ máy nghe được.
+    static func syllables(for text: String) -> [(char: String, syllable: String)] {
+        units(for: text).flatMap { unit -> [(char: String, syllable: String)] in
+            guard unit.literal == nil else { return [] }
+            return zip(unit.zh.map(String.init), unit.syllables).compactMap { char, syllable in
+                guard let first = char.first, isHan(first), !syllable.isEmpty else { return nil }
+                return (char, syllable)
+            }
+        }
+    }
+
     static func words(for text: String) -> [PinyinWord] {
+        let units = units(for: text)
+
+        // Viết hoa chữ đầu câu.
+        var capitalizeNext = true
+        return units.map { unit in
+            var py = unit.pinyin
+            if capitalizeNext, let first = py.first {
+                py = first.uppercased() + py.dropFirst()
+            }
+            if !py.isEmpty || !unit.trailing.isEmpty {
+                capitalizeNext = py.isEmpty ? capitalizeNext : unit.trailing.contains(where: { "。？！.?!".contains($0) })
+            }
+            return PinyinWord(zh: unit.zh + unit.trailing, py: py + asciiPunctuation(unit.trailing), hv: hanViet(for: unit))
+        }
+    }
+
+    private static func units(for text: String) -> [Unit] {
         var units: [Unit] = []
         let tokenizer = NLTokenizer(unit: .word)
         tokenizer.setLanguage(.simplifiedChinese)
@@ -36,19 +65,7 @@ enum ChineseText {
         mergeErhua(&units)
         applyContextRules(&units)
         applyToneSandhi(&units)
-
-        // Viết hoa chữ đầu câu.
-        var capitalizeNext = true
-        return units.map { unit in
-            var py = unit.pinyin
-            if capitalizeNext, let first = py.first {
-                py = first.uppercased() + py.dropFirst()
-            }
-            if !py.isEmpty || !unit.trailing.isEmpty {
-                capitalizeNext = py.isEmpty ? capitalizeNext : unit.trailing.contains(where: { "。？！.?!".contains($0) })
-            }
-            return PinyinWord(zh: unit.zh + unit.trailing, py: py + asciiPunctuation(unit.trailing), hv: hanViet(for: unit))
-        }
+        return units
     }
 
     // MARK: - Đơn vị từ

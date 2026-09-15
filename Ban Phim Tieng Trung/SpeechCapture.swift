@@ -11,12 +11,25 @@ import Speech
 import UIKit
 
 final class SpeechCapture: ObservableObject {
+    /// Một đoạn máy nghe được kèm độ chắc chắn của bộ nhận dạng.
+    struct HeardSegment: Codable, Equatable {
+        let text: String
+        /// 0–1: máy càng nghe không chắc thì càng thấp. 0 nghĩa là máy không chấm đoạn này.
+        let confidence: Float
+    }
+
     @Published private(set) var isListening = false
     @Published private(set) var transcript = ""
     @Published private(set) var level: Float = 0
+    /// Kết quả cuối tách theo đoạn, dùng để chấm phát âm.
+    @Published private(set) var segments: [HeardSegment] = []
+    /// Người học thật sự phát ra tiếng trong bao lâu (giây), tính từ đầu đến cuối đoạn nghe được.
+    @Published private(set) var spokenDuration: TimeInterval = 0
 
     /// Lỗi quyền micro / nhận dạng.
     var onError: ((String) -> Void)?
+    /// Chữ nghe được vừa đổi (kể cả kết quả tạm), để chấm ngay trong lúc người học còn đang đọc.
+    var onTranscript: ((String) -> Void)?
 
     private let audioEngine = AVAudioEngine()
     private let sink = AudioTapSink()
@@ -25,6 +38,9 @@ final class SpeechCapture: ObservableObject {
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
     private var targets: [String] = []
+    /// Thời gian chờ trước khi tự dừng: lần đầu (chưa nói gì) và sau mỗi lần nghe thêm chữ.
+    private var firstPause: TimeInterval = SpeechPace.normal.firstPause
+    private var pause: TimeInterval = SpeechPace.normal.pause
     private var completion: ((String) -> Void)?
     private var stopWork: DispatchWorkItem?
     private var generation = 0
@@ -42,8 +58,13 @@ final class SpeechCapture: ObservableObject {
     }
 
     /// Bắt đầu nghe. `completion` nhận câu nghe được khi dừng (đọc khớp một câu mẫu, im lặng, hoặc gọi `finish()`).
-    func start(targets: [String], completion: @escaping (String) -> Void) {
+    /// `firstPause` / `pause`: bỏ trống thì theo cài đặt "chờ khi bạn ngừng nói" của người dùng.
+    func start(targets: [String], firstPause: TimeInterval? = nil, pause: TimeInterval? = nil,
+               completion: @escaping (String) -> Void) {
         cancel()
+        let pace = SharedSettings.speechPace
+        self.firstPause = firstPause ?? pace.firstPause
+        self.pause = pause ?? pace.pause
         generation += 1
         let current = generation
         NaturalSpeaker.all.forEach { $0.stop() }
@@ -80,11 +101,21 @@ final class SpeechCapture: ObservableObject {
         }
     }
 
+    deinit {
+        if let backgroundObserver {
+            NotificationCenter.default.removeObserver(backgroundObserver)
+        }
+    }
+
     /// Dừng mà không trả kết quả.
     func cancel() {
         generation += 1
         completion = nil
         stopAudio()
+        // Xoá luôn chữ cũ, nếu không lần nghe sau sẽ hiện lại câu của lần trước.
+        transcript = ""
+        segments = []
+        spokenDuration = 0
     }
 
     private func begin(targets: [String], completion: @escaping (String) -> Void) throws {
@@ -95,6 +126,9 @@ final class SpeechCapture: ObservableObject {
 
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
+        // Mặc định iOS tắt hết tiếng hệ thống và rung khi app đang thu micro — mà đó đúng là
+        // lúc cần báo cho người học biết họ vừa đọc đúng một từ.
+        try? session.setAllowHapticsAndSystemSoundsDuringRecording(true)
         try session.setActive(true)
 
         let input = audioEngine.inputNode
@@ -112,13 +146,18 @@ final class SpeechCapture: ObservableObject {
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
-        request.contextualStrings = targets
+        // Cố ý KHÔNG đặt contextualStrings = targets. Làm vậy là mách trước đáp án cho bộ
+        // nhận dạng: nó sẽ thiên về việc trả ra đúng câu mẫu kể cả khi người học mới đọc
+        // được một nửa, rồi câu đó được chấm đúng. Một bài kiểm tra phát âm thì phải nghe
+        // xem người ta nói gì, chứ không phải nghe cái mình đang mong đợi.
 
         self.recognizer = recognizer
         self.request = request
         self.targets = targets
         self.completion = completion
         transcript = ""
+        segments = []
+        spokenDuration = 0
         isListening = true
         sink.setRequest(request)
 
@@ -129,18 +168,33 @@ final class SpeechCapture: ObservableObject {
                 self.handle(result: result, error: error)
             }
         }
-        scheduleAutoStop(after: 7)
+        scheduleAutoStop(after: firstPause)
     }
 
     private func handle(result: SFSpeechRecognitionResult?, error: Error?) {
         guard isListening else { return }
         if let result {
-            transcript = result.bestTranscription.formattedString
+            let text = result.bestTranscription.formattedString
+            // Máy hay gửi lại đúng chuỗi cũ; chấm lại cả câu mỗi lần như vậy là phí.
+            if text != transcript {
+                transcript = text
+                onTranscript?(text)
+            }
+            let heard = result.bestTranscription.segments.map {
+                HeardSegment(text: $0.substring, confidence: $0.confidence)
+            }
+            // Kết quả tạm luôn có điểm 0; chỉ ghi đè khi có điểm thật để không mất bản đã chấm.
+            if segments.isEmpty || heard.contains(where: { $0.confidence > 0 }) {
+                segments = heard
+            }
+            if let last = result.bestTranscription.segments.last {
+                spokenDuration = last.timestamp + last.duration
+            }
             let matched = targets.contains { PhraseMatcher.isCorrect(heard: transcript, target: $0) }
             if result.isFinal || matched {
                 complete()
             } else {
-                scheduleAutoStop(after: 1.8)
+                scheduleAutoStop(after: pause)
             }
         } else if error != nil {
             complete()

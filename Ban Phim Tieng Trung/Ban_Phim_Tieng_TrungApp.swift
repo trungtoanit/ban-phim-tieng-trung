@@ -11,6 +11,10 @@ import SwiftUI
 struct Ban_Phim_Tieng_TrungApp: App {
     @State private var openedFromKeyboard = false
     @State private var tab: AppTab = .practice
+    @State private var showSplash = true
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(StreakStore.goalKey, store: SharedSettings.store)
+    private var dailyGoal = StreakStore.defaultGoal
 
     init() {
         NaturalSpeaker.hasOpenAIVoice = { OpenAISettings.hasAPIKey }
@@ -21,13 +25,29 @@ struct Ban_Phim_Tieng_TrungApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(tab: $tab, openedFromKeyboard: openedFromKeyboard)
-                .onOpenURL { url in
-                    guard url.scheme == AppGroup.urlScheme else { return }
-                    openedFromKeyboard = true
-                    tab = .keyboard
-                    VoiceEngine.shared.activate()
+            ZStack {
+                ContentView(tab: $tab, openedFromKeyboard: openedFromKeyboard)
+                if showSplash {
+                    SplashView { showSplash = false }
+                        .zIndex(1)
                 }
+            }
+            .onOpenURL { url in
+                guard url.scheme == AppGroup.urlScheme else { return }
+                // Bàn phím mở app để bật micro: vào thẳng, không bắt chờ màn chào.
+                showSplash = false
+                openedFromKeyboard = true
+                tab = .keyboard
+                VoiceEngine.shared.activate()
+            }
+            // Icon ngoài màn hình chính đi theo tâm trạng gấu trúc.
+            .onChange(of: scenePhase) { phase in
+                if phase == .active { MascotIcon.sync() }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .streakChanged)) { _ in
+                MascotIcon.sync()
+            }
+            .onChange(of: dailyGoal) { _ in MascotIcon.sync() }
         }
     }
 }

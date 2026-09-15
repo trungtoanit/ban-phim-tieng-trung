@@ -13,7 +13,7 @@
 
 **Ứng dụng**
 - Luyện nói 1000 câu giao tiếp theo 20 chủ đề, đọc đúng thì câu được đánh dấu đã thuộc
-- Hội thoại AI theo tình huống (OpenAI) với chữ Hán + pinyin, góp ý và câu sửa tự nhiên hơn
+- Hội thoại AI theo tình huống bạn tự gõ (OpenAI), mỗi tình huống nói đủ 50 câu thì tự xoá, với chữ Hán + pinyin, góp ý và câu sửa tự nhiên hơn
 - Giọng đọc tự nhiên (OpenAI / Google / giọng Nâng cao của iOS)
 
 ## Chạy dự án
