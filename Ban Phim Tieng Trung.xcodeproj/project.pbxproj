@@ -52,6 +52,9 @@
 		B10000000000000000000138 /* hanviet.json in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* hanviet.json */; };
 		B10000000000000000000139 /* replies.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000026 /* replies.json */; };
 		B10000000000000000000140 /* BanPhimTrungKeyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B10000000000000000000025 /* BanPhimTrungKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B10000000000000000000401 /* MistakeExplainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000403 /* MistakeExplainer.swift */; };
+		B10000000000000000000402 /* MistakeExplainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000403 /* MistakeExplainer.swift */; };
+		B10000000000000000000404 /* PinyinGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000315 /* PinyinGuide.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -119,6 +122,7 @@
 		B10000000000000000000024 /* BanPhimTrungKeyboard.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BanPhimTrungKeyboard.entitlements; sourceTree = "<group>"; };
 		B10000000000000000000025 /* BanPhimTrungKeyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BanPhimTrungKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10000000000000000000026 /* replies.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = replies.json; sourceTree = "<group>"; };
+		B10000000000000000000403 /* MistakeExplainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MistakeExplainer.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -208,6 +212,7 @@
 				B10000000000000000000012 /* RubyText.swift */,
 				B10000000000000000000013 /* PhraseMatcher.swift */,
 				B10000000000000000000313 /* PronunciationLog.swift */,
+				B10000000000000000000403 /* MistakeExplainer.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -339,6 +344,7 @@
 				B10000000000000000000112 /* RubyText.swift in Sources */,
 				B10000000000000000000113 /* PhraseMatcher.swift in Sources */,
 				B10000000000000000000311 /* PronunciationLog.swift in Sources */,
+				B10000000000000000000401 /* MistakeExplainer.swift in Sources */,
 				B10000000000000000000314 /* PinyinGuide.swift in Sources */,
 				B10000000000000000000316 /* PronunciationViews.swift in Sources */,
 				B10000000000000000000103 /* PracticeModel.swift in Sources */,
@@ -373,6 +379,8 @@
 				B10000000000000000000134 /* Translator.swift in Sources */,
 				B10000000000000000000136 /* PhraseMatcher.swift in Sources */,
 				B10000000000000000000312 /* PronunciationLog.swift in Sources */,
+				B10000000000000000000402 /* MistakeExplainer.swift in Sources */,
+				B10000000000000000000404 /* PinyinGuide.swift in Sources */,
 				B10000000000000000000137 /* NaturalSpeaker.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

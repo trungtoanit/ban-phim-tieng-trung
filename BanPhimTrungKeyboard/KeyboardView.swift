@@ -241,28 +241,30 @@ struct KeyboardView: View {
 
     private func wordDetailView(_ detail: KeyboardModel.WordDetail) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(RubyText.splitPunctuation(detail.word.zh).core)
-                        .font(.system(size: 26, weight: .semibold))
-                    Text(detail.word.py.trimmingCharacters(in: .punctuationCharacters))
-                        .font(.system(size: 15))
-                        .foregroundColor(.secondary)
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(RubyText.splitPunctuation(detail.word.zh).core)
+                            .font(.system(size: 26, weight: .semibold))
+                            .foregroundColor(detail.word.flagged == true ? .red : .primary)
+                        Text(detail.word.py.trimmingCharacters(in: .punctuationCharacters))
+                            .font(.system(size: 15))
+                            .foregroundColor(.secondary)
+                    }
+                    if let hv = detail.word.hv {
+                        Text("Hán Việt: \(hv)")
+                            .font(.system(size: 12))
+                            .foregroundColor(Color(red: 0.55, green: 0.35, blue: 0.2))
+                    }
+                    Text(detail.meaning.map { "Nghĩa: \($0)" } ?? "Đang tra nghĩa…")
+                        .font(.system(size: 14))
+                        .foregroundColor(detail.meaning == nil ? .secondary : .primary)
+                    if detail.word.flagged == true {
+                        pronunciationHint(detail)
+                    }
                 }
-                if let hv = detail.word.hv {
-                    Text("Hán Việt: \(hv)")
-                        .font(.system(size: 12))
-                        .foregroundColor(Color(red: 0.55, green: 0.35, blue: 0.2))
-                }
-                Text(detail.meaning ?? "Đang tra nghĩa…")
-                    .font(.system(size: 14))
-                    .foregroundColor(detail.meaning == nil ? .secondary : .primary)
-                    .lineLimit(detail.word.flagged == true ? 1 : 3)
-                if detail.word.flagged == true {
-                    pronunciationHint(detail)
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Spacer(minLength: 0)
             VStack(spacing: 10) {
                 closeButton(model.closeWord)
                 Button(action: model.speakWord) {
@@ -275,32 +277,68 @@ struct KeyboardView: View {
         }
     }
 
+    /// Giải thích bằng tiếng Việt: máy nghe khác ở thanh điệu, phụ âm đầu hay vần, và cách đọc lại.
     @ViewBuilder
     private func pronunciationHint(_ detail: KeyboardModel.WordDetail) -> some View {
-        let alternatives = detail.word.alternatives ?? []
+        let heard = RubyText.splitPunctuation(detail.word.zh).core
+        let alternatives = Array((detail.word.alternatives ?? []).prefix(3))
+
         if alternatives.isEmpty {
-            Text("Máy nghe chưa chắc chữ này — thử đọc chậm, rõ thanh điệu hơn.")
-                .font(.system(size: 12))
-                .foregroundColor(.red)
+            explanationView(MistakeExplainer.explainUnclear(heard))
         } else {
-            HStack(spacing: 6) {
-                Text(detail.index == nil ? "Máy còn nghe thành:" : "Ý bạn là:")
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Máy nghe chưa chắc. Nếu ý bạn là:")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.red)
                 ForEach(alternatives, id: \.self) { alternative in
-                    Button {
-                        model.replaceWord(with: alternative)
-                    } label: {
-                        Text(alternative)
-                            .font(.system(size: 16, weight: .medium))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 3)
-                            .background(RoundedRectangle(cornerRadius: 7).fill(KeyColors.key))
-                            .foregroundColor(.primary)
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 8) {
+                            Button {
+                                model.replaceWord(with: alternative)
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Text(alternative)
+                                        .font(.system(size: 17, weight: .semibold))
+                                    if detail.index != nil {
+                                        Image(systemName: "arrow.2.squarepath")
+                                            .font(.system(size: 11))
+                                    }
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 3)
+                                .background(RoundedRectangle(cornerRadius: 7).fill(KeyColors.key))
+                                .foregroundColor(.primary)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(detail.index == nil)
+                            .accessibilityLabel("Sửa thành \(alternative)")
+
+                            if let meaning = detail.alternativeMeanings[alternative] {
+                                Text(meaning)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                        explanationView(MistakeExplainer.explain(intended: alternative, heard: heard))
                     }
-                    .buttonStyle(.plain)
-                    .disabled(detail.index == nil)
                 }
+            }
+            .padding(.top, 2)
+        }
+    }
+
+    private func explanationView(_ explanation: MistakeExplanation) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(explanation.summary)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(explanation.isHomophone ? .green : .red)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(explanation.points, id: \.self) { point in
+                Text("• \(point)")
+                    .font(.system(size: 11))
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

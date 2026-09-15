@@ -71,6 +71,8 @@ final class KeyboardModel: ObservableObject {
     struct WordDetail: Equatable {
         var word: PinyinWord
         var meaning: String?
+        /// Nghĩa tiếng Việt của từng chữ máy còn nghe thành, để người học biết mình vừa nói ra nghĩa gì.
+        var alternativeMeanings: [String: String] = [:]
         /// Vị trí từ trong câu vừa chèn, có khi sửa được bằng phương án khác.
         var index: Int?
     }
@@ -442,6 +444,15 @@ final class KeyboardModel: ObservableObject {
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.wordToken == token else { return }
                 self.wordDetail?.meaning = meaning ?? "Không tra được nghĩa — kiểm tra kết nối mạng."
+            }
+        }
+        for alternative in (word.alternatives ?? []).prefix(3) {
+            Task {
+                let meaning = try? await Translator.translate(alternative, from: "zh-CN", to: "vi")
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.wordToken == token, let meaning else { return }
+                    self.wordDetail?.alternativeMeanings[alternative] = meaning
+                }
             }
         }
     }
