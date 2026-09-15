@@ -10,13 +10,15 @@ import SwiftUI
 @main
 struct Ban_Phim_Tieng_TrungApp: App {
     @State private var openedFromKeyboard = false
-    @State private var tab: AppTab = .practice
+    /// Tính năng đang mở trên màn hình chính; nil là đang ở màn hình chính.
+    @State private var tab: AppTab?
     @State private var showSplash = true
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(StreakStore.goalKey, store: SharedSettings.store)
     private var dailyGoal = StreakStore.defaultGoal
 
     init() {
+        StreakStore.raiseGoalIfNeeded()
         NaturalSpeaker.hasOpenAIVoice = { OpenAISettings.hasAPIKey }
         NaturalSpeaker.openAISpeech = { text, languageCode in
             try await OpenAIClient.speech(text: text, languageCode: languageCode)

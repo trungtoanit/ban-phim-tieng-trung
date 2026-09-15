@@ -132,6 +132,7 @@ struct PracticeView: View {
             }
             .searchable(text: $search, prompt: "Tìm câu (Việt, 中文, pinyin)")
             .navigationTitle("Luyện nói")
+            .homeBackButton()
             .toolbar {
                 ToolbarItemGroup(placement: .primaryAction) {
                     Menu {

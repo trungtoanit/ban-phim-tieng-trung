@@ -331,6 +331,9 @@ struct KeyboardView: View {
                     Text(detail.meaning.map { "Nghĩa: \($0)" } ?? "Đang tra nghĩa…")
                         .font(.system(size: 14))
                         .foregroundColor(detail.meaning == nil ? .secondary : .primary)
+                    if detail.index != nil {
+                        editSection(detail)
+                    }
                     if detail.word.flagged == true {
                         pronunciationHint(detail)
                     }
@@ -353,51 +356,77 @@ struct KeyboardView: View {
     @ViewBuilder
     private func pronunciationHint(_ detail: KeyboardModel.WordDetail) -> some View {
         let heard = RubyText.splitPunctuation(detail.word.zh).core
-        let alternatives = Array((detail.word.alternatives ?? []).prefix(3))
-
-        if alternatives.isEmpty {
-            explanationView(MistakeExplainer.explainUnclear(heard))
+        if let alternative = detail.word.alternatives?.first {
+            explanationView(MistakeExplainer.explain(intended: alternative, heard: heard))
+                .padding(.top, 2)
         } else {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Máy nghe chưa chắc. Nếu ý bạn là:")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.red)
-                ForEach(alternatives, id: \.self) { alternative in
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(spacing: 8) {
-                            Button {
-                                model.replaceWord(with: alternative)
-                            } label: {
-                                HStack(spacing: 4) {
-                                    Text(alternative)
-                                        .font(.system(size: 17, weight: .semibold))
-                                    if detail.index != nil {
-                                        Image(systemName: "arrow.2.squarepath")
-                                            .font(.system(size: 11))
-                                    }
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 3)
-                                .background(RoundedRectangle(cornerRadius: 7).fill(KeyColors.key))
-                                .foregroundColor(.primary)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(detail.index == nil)
-                            .accessibilityLabel("Sửa thành \(alternative)")
+            explanationView(MistakeExplainer.explainUnclear(heard))
+                .padding(.top, 2)
+        }
+    }
 
-                            if let meaning = detail.alternativeMeanings[alternative] {
-                                Text(meaning)
-                                    .font(.system(size: 12))
+    /// Xoá từ, hoặc chọn một từ gần âm có nghĩa để sửa.
+    @ViewBuilder
+    private func editSection(_ detail: KeyboardModel.WordDetail) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Button(action: model.deleteWord) {
+                    Label("Xoá từ", systemImage: "trash")
+                        .font(.system(size: 13, weight: .semibold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(KeyColors.brand.opacity(0.14)))
+                        .foregroundColor(KeyColors.brand)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Xoá từ này khỏi câu")
+
+                Text("hoặc sửa thành:")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.secondary)
+                if detail.searching {
+                    ProgressView()
+                        .scaleEffect(0.7)
+                }
+            }
+
+            if detail.suggestions.isEmpty {
+                if !detail.searching {
+                    Text("Không tìm được từ gần âm — kiểm tra kết nối mạng.")
+                        .font(.system(size: 12))
+                        .foregroundColor(.secondary)
+                }
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 6)], alignment: .leading, spacing: 6) {
+                    ForEach(detail.suggestions) { suggestion in
+                        Button {
+                            model.replaceWord(with: suggestion.zh)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(suggestion.zh)
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.primary)
+                                Text(suggestion.py)
+                                    .font(.system(size: 10))
                                     .foregroundColor(.secondary)
                                     .lineLimit(1)
+                                Text(suggestion.meaning ?? "…")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(suggestion.meaning == nil ? .secondary : KeyColors.brand)
+                                    .lineLimit(1)
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 5)
+                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(KeyColors.key))
                         }
-                        explanationView(MistakeExplainer.explain(intended: alternative, heard: heard))
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Sửa thành \(suggestion.zh), \(suggestion.meaning ?? "")")
                     }
                 }
             }
-            .padding(.top, 2)
         }
+        .padding(.top, 4)
     }
 
     private func explanationView(_ explanation: MistakeExplanation) -> some View {

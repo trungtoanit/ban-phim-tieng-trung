@@ -74,8 +74,18 @@ final class KeyboardModel: ObservableObject {
         var meaning: String?
         /// Nghĩa tiếng Việt của từng chữ máy còn nghe thành, để người học biết mình vừa nói ra nghĩa gì.
         var alternativeMeanings: [String: String] = [:]
-        /// Vị trí từ trong câu vừa chèn, có khi sửa được bằng phương án khác.
+        /// Vị trí từ trong câu vừa chèn: có thì xoá hoặc sửa được từ này.
         var index: Int?
+        /// Từ gần âm có nghĩa để sửa thành.
+        var suggestions: [Suggestion] = []
+        var searching = false
+    }
+
+    struct Suggestion: Equatable, Identifiable {
+        let zh: String
+        let py: String
+        var meaning: String?
+        var id: String { zh }
     }
 
     private struct ReadingInfo: Equatable {
@@ -494,15 +504,19 @@ final class KeyboardModel: ObservableObject {
         let text = RubyText.splitPunctuation(word.zh).core
         guard !text.isEmpty else { return }
         NaturalSpeaker.chinese.speak(text)
+        // Từ nào trong câu vừa chèn cũng xoá hoặc sửa được, không riêng từ bị đánh dấu đỏ.
         var index: Int?
-        if panel == nil, case let .result(words, _, _) = display, word.flagged == true,
-           !(word.alternatives ?? []).isEmpty {
+        if panel == nil, case let .result(words, chinese, _) = display, chinese == lastInserted,
+           ChineseText.containsHan(text) {
             index = words.firstIndex(of: word)
         }
-        wordDetail = WordDetail(word: word, index: index)
+        wordDetail = WordDetail(word: word, index: index, searching: index != nil)
 
         let token = UUID()
         wordToken = token
+        if index != nil {
+            loadSuggestions(for: text, recognizer: word.alternatives ?? [], token: token)
+        }
         Task {
             let meaning = try? await Translator.translate(text, from: "zh-CN", to: "vi")
             DispatchQueue.main.async { [weak self] in
@@ -521,7 +535,88 @@ final class KeyboardModel: ObservableObject {
         }
     }
 
-    /// Thay từ bị đánh dấu đỏ trong câu vừa chèn bằng chữ đúng ý người dùng.
+    /// Tìm từ gần âm có nghĩa: trước hết là chữ máy nhận dạng còn phân vân, rồi từ đồng âm
+    /// (bộ gõ pinyin chỉ trả về từ có thật, xếp theo độ thông dụng), rồi các âm người Việt hay nhầm.
+    private func loadSuggestions(for text: String, recognizer: [String], token: UUID) {
+        Task {
+            var found: [String] = recognizer.filter { $0 != text && !$0.isEmpty }
+            for zh in await PinyinCandidates.similar(to: text) where !found.contains(zh) {
+                found.append(zh)
+            }
+            let list = Array(found.prefix(8)).map { zh in
+                Suggestion(zh: zh, py: ChineseText.words(for: zh).map(\.py).joined(separator: " ").lowercased())
+            }
+            await MainActor.run {
+                guard self.wordToken == token else { return }
+                self.wordDetail?.suggestions = list
+                self.wordDetail?.searching = false
+            }
+            for suggestion in list {
+                Task {
+                    let meaning = try? await Translator.translate(suggestion.zh, from: "zh-CN", to: "vi")
+                    await MainActor.run {
+                        guard self.wordToken == token, let meaning,
+                              let i = self.wordDetail?.suggestions.firstIndex(where: { $0.zh == suggestion.zh }) else { return }
+                        self.wordDetail?.suggestions[i].meaning = meaning
+                    }
+                }
+            }
+        }
+    }
+
+    /// Xoá một từ khỏi câu vừa chèn (cả trong ô chat lẫn trên khung xem trước).
+    func deleteWord() {
+        guard let controller, let index = wordDetail?.index,
+              case let .result(currentWords, chinese, _) = display, index < currentWords.count
+        else { return }
+        guard chinese == lastInserted, controller.textBeforeCursor.hasSuffix(lastInserted) else {
+            closeWord()
+            panel = .message("Câu trong ô chat đã thay đổi nên không xoá tự động được. Hãy xoá tay từ đó.")
+            return
+        }
+
+        var words = currentWords
+        let original = words[index]
+        let parts = RubyText.splitPunctuation(original.zh)
+        let offset = words[..<index].reduce(0) { $0 + $1.zh.count }
+        let charactersAfter = chinese.count - offset - parts.core.count
+
+        controller.moveCursor(by: -charactersAfter)
+        for _ in parts.core { controller.deleteBackward() }
+        controller.moveCursor(by: charactersAfter)
+
+        if parts.trailing.isEmpty {
+            words.remove(at: index)
+        } else {
+            // Giữ lại dấu câu đứng sau từ vừa xoá.
+            let trailingPunctuation = String(original.py.reversed().prefix { $0.isPunctuation }.reversed())
+            words[index] = PinyinWord(zh: parts.trailing, py: trailingPunctuation)
+        }
+        applyCorrection(words)
+    }
+
+    /// Câu đã sửa: hiện lại, dịch lại nghĩa (chế độ 中文), cho phép hoàn tác.
+    private func applyCorrection(_ words: [PinyinWord]) {
+        correctedWords = words
+        if state.mode == .chinese {
+            let sentence = words.map(\.zh).joined()
+            correctedMeaning = ""
+            Task {
+                let meaning = try? await Translator.translate(sentence, from: "zh-CN", to: "vi")
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.correctedWords?.map(\.zh).joined() == sentence else { return }
+                    self.correctedMeaning = meaning ?? "Không dịch được nghĩa — kiểm tra kết nối mạng."
+                }
+            }
+        }
+        lastInserted = words.map(\.zh).joined()
+        lastReplaced = ""
+        canUndo = true
+        haptic.impactOccurred()
+        closeWord()
+    }
+
+    /// Thay một từ trong câu vừa chèn bằng từ đúng ý người dùng.
     func replaceWord(with replacement: String) {
         guard let controller, let index = wordDetail?.index,
               case let .result(currentWords, chinese, _) = display, index < currentWords.count
@@ -564,23 +659,7 @@ final class KeyboardModel: ObservableObject {
                 })
         }
 
-        correctedWords = words
-        if state.mode == .chinese {
-            let sentence = words.map(\.zh).joined()
-            correctedMeaning = ""
-            Task {
-                let meaning = try? await Translator.translate(sentence, from: "zh-CN", to: "vi")
-                DispatchQueue.main.async { [weak self] in
-                    guard let self, self.correctedWords?.map(\.zh).joined() == sentence else { return }
-                    self.correctedMeaning = meaning ?? "Không dịch được nghĩa — kiểm tra kết nối mạng."
-                }
-            }
-        }
-        lastInserted = words.map(\.zh).joined()
-        lastReplaced = ""
-        canUndo = true
-        haptic.impactOccurred()
-        closeWord()
+        applyCorrection(words)
     }
 
     func speakWord() {
@@ -645,5 +724,96 @@ final class KeyboardModel: ObservableObject {
         canUndo = false
         lastInserted = ""
         lastReplaced = ""
+    }
+}
+
+/// Từ tiếng Trung có nghĩa đọc giống hoặc gần giống một từ, tra qua bộ gõ pinyin của Google
+/// (chỉ trả về từ có thật, xếp theo độ thông dụng).
+enum PinyinCandidates {
+    /// Các cặp âm người Việt hay nói lẫn, dùng để tìm thêm từ gần âm.
+    private static let initialSwaps: [(String, String)] = [("zh", "z"), ("ch", "c"), ("sh", "s"), ("n", "l"), ("j", "zh"), ("q", "ch"), ("x", "sh")]
+    private static let finalSwaps: [(String, String)] = [("ing", "in"), ("eng", "en"), ("ang", "an"), ("ong", "eng")]
+
+    static func similar(to word: String) async -> [String] {
+        let syllables = ChineseText.syllables(for: word).map { plain($0.syllable) }
+        guard !syllables.isEmpty, syllables.count == word.count else { return [] }
+
+        var queries = [syllables.joined()]
+        for index in syllables.indices {
+            for variant in variants(of: syllables[index]) {
+                var copy = syllables
+                copy[index] = variant
+                let query = copy.joined()
+                if !queries.contains(query) { queries.append(query) }
+            }
+            if queries.count >= 6 { break }
+        }
+
+        var results: [Int: [String]] = [:]
+        await withTaskGroup(of: (Int, [String]).self) { group in
+            for (order, query) in queries.prefix(6).enumerated() {
+                group.addTask { (order, (try? await candidates(query)) ?? []) }
+            }
+            for await (order, list) in group { results[order] = list }
+        }
+
+        var merged: [String] = []
+        for order in results.keys.sorted() {
+            // Đồng âm hoàn toàn lấy nhiều hơn, gần âm chỉ lấy vài từ đầu.
+            let limit = order == 0 ? 6 : 2
+            let fitting = (results[order] ?? []).filter { candidate in
+                candidate.count == word.count && candidate != word && ChineseText.containsHan(candidate)
+                    && candidate.applyingTransform(StringTransform("Hant-Hans"), reverse: false) == candidate
+            }
+            for candidate in fitting.prefix(limit) where !merged.contains(candidate) {
+                merged.append(candidate)
+            }
+        }
+        return merged
+    }
+
+    private static func plain(_ syllable: String) -> String {
+        let stripped = syllable.applyingTransform(.stripDiacritics, reverse: false) ?? syllable
+        return stripped.lowercased().replacingOccurrences(of: "ü", with: "v").filter { $0.isLetter }
+    }
+
+    private static func variants(of syllable: String) -> [String] {
+        var result: [String] = []
+        for (a, b) in initialSwaps {
+            if syllable.hasPrefix(a) { result.append(b + syllable.dropFirst(a.count)) }
+            else if syllable.hasPrefix(b), !(b == "z" && syllable.hasPrefix("zh")), !(b == "c" && syllable.hasPrefix("ch")),
+                    !(b == "s" && syllable.hasPrefix("sh")) {
+                result.append(a + syllable.dropFirst(b.count))
+            }
+        }
+        for (a, b) in finalSwaps {
+            if syllable.hasSuffix(a) { result.append(syllable.dropLast(a.count) + b) }
+            else if syllable.hasSuffix(b) { result.append(syllable.dropLast(b.count) + a) }
+        }
+        return Array(result.prefix(3))
+    }
+
+    private static func candidates(_ query: String) async throws -> [String] {
+        var components = URLComponents(string: "https://inputtools.google.com/request")!
+        components.queryItems = [
+            URLQueryItem(name: "text", value: query),
+            URLQueryItem(name: "itc", value: "zh-t-i0-pinyin"),
+            URLQueryItem(name: "num", value: "12"),
+            URLQueryItem(name: "cp", value: "0"),
+            URLQueryItem(name: "cs", value: "1"),
+            URLQueryItem(name: "ie", value: "utf-8"),
+            URLQueryItem(name: "oe", value: "utf-8"),
+        ]
+        var request = URLRequest(url: components.url!)
+        request.timeoutInterval = 6
+        let (data, _) = try await URLSession.shared.data(for: request)
+        // ["SUCCESS", [["kebi", ["科比", "可比", …], [], {…}]]]
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [Any],
+              (root.first as? String) == "SUCCESS",
+              let items = root.dropFirst().first as? [Any],
+              let first = items.first as? [Any], first.count > 1,
+              let list = first[1] as? [String]
+        else { return [] }
+        return list
     }
 }

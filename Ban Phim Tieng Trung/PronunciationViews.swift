@@ -178,6 +178,7 @@ struct SoundsTabView: View {
             }
             .background(Color(.systemGroupedBackground))
             .navigationTitle("Học phát âm")
+            .homeBackButton()
             .navigationDestination(for: SoundGuide.self) { guide in
                 SoundDetailView(guide: guide, log: log)
             }
@@ -704,6 +705,7 @@ struct MistakesTabView: View {
                 }
             }
             .navigationTitle("Sửa lỗi phát âm")
+            .homeBackButton()
             .navigationDestination(for: SoundGuide.self) { guide in
                 SoundDetailView(guide: guide, log: log)
             }

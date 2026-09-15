@@ -65,9 +65,12 @@ private struct WordPopupCard: View {
     let onClose: () -> Void
 
     @State private var meaning: String?
+    /// Tra nghĩa hỏng: vẫn hiện thông báo nhưng không cho thêm vào từ vựng.
+    @State private var meaningFailed = false
     @State private var appeared = false
 
     private var text: String { RubyText.splitPunctuation(word.zh).core }
+    private var pinyin: String { word.py.trimmingCharacters(in: .punctuationCharacters) }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -100,6 +103,8 @@ private struct WordPopupCard: View {
                         .background(Circle().fill(accentRed.opacity(0.12)))
                 }
                 .accessibilityLabel("Nghe lại")
+
+                AddVocabularyButton(zh: text, py: pinyin, hv: word.hv, meaning: meaningFailed ? nil : meaning)
 
                 Button(action: onDetail) {
                     Label("Chi tiết", systemImage: "sparkles")
@@ -139,6 +144,7 @@ private struct WordPopupCard: View {
                 return
             }
             let result = try? await Translator.translate(text, from: "zh-CN", to: "vi")
+            meaningFailed = result == nil
             meaning = result ?? "Không tra được nghĩa — kiểm tra kết nối mạng."
         }
     }
@@ -318,6 +324,15 @@ struct WordInsightView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Xong") { dismiss() }
+                }
+                if let insight {
+                    ToolbarItem(placement: .bottomBar) {
+                        AddVocabularyButton(zh: text, py: insight.pinyin,
+                                            hv: insight.hanViet.isEmpty ? word.hv : insight.hanViet,
+                                            meaning: insight.meaning, compact: false)
+                            .font(.headline)
+                            .foregroundStyle(accentRed)
+                    }
                 }
                 if insight != nil, OpenAISettings.hasAPIKey {
                     ToolbarItem(placement: .cancellationAction) {

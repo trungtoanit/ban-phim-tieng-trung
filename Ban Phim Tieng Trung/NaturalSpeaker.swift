@@ -40,7 +40,23 @@ final class NaturalSpeaker: NSObject, ObservableObject {
         settingsLanguageName: "Tiếng Trung (Trung Quốc đại lục)"
     ))
 
-    static var all: [NaturalSpeaker] { [vietnamese, chinese] }
+    // Thêm cho tính năng phiên dịch hội thoại.
+    static let english = NaturalSpeaker(language: Language(
+        voicePrefix: "en", googleCode: "en", storageKey: "english", title: "English",
+        sample: "Hello, nice to meet you.", defaultSpeed: 0.95, settingsLanguageName: "English"
+    ))
+
+    static let japanese = NaturalSpeaker(language: Language(
+        voicePrefix: "ja", googleCode: "ja", storageKey: "japanese", title: "日本語",
+        sample: "こんにちは、はじめまして。", defaultSpeed: 0.9, settingsLanguageName: "日本語"
+    ))
+
+    static let korean = NaturalSpeaker(language: Language(
+        voicePrefix: "ko", googleCode: "ko", storageKey: "korean", title: "한국어",
+        sample: "안녕하세요, 반갑습니다.", defaultSpeed: 0.9, settingsLanguageName: "한국어"
+    ))
+
+    static var all: [NaturalSpeaker] { [vietnamese, chinese, english, japanese, korean] }
 
     /// App gán hàm này để không đụng audio session khi đang giữ micro cho bàn phím.
     static var isMicSessionActive: () -> Bool = { false }

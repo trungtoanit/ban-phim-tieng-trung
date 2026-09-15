@@ -31,6 +31,9 @@ final class SpeechCapture: ObservableObject {
     /// Chữ nghe được vừa đổi (kể cả kết quả tạm), để chấm ngay trong lúc người học còn đang đọc.
     var onTranscript: ((String) -> Void)?
 
+    /// Ngôn ngữ nhận dạng; mặc định tiếng Trung phổ thông. Phiên dịch hội thoại đổi theo người nói.
+    var localeIdentifier = "zh-CN"
+
     private let audioEngine = AVAudioEngine()
     private let sink = AudioTapSink()
     private var tapInstalled = false
@@ -119,8 +122,10 @@ final class SpeechCapture: ObservableObject {
     }
 
     private func begin(targets: [String], completion: @escaping (String) -> Void) throws {
-        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN")), recognizer.isAvailable else {
-            onError?("Nhận dạng tiếng Trung đang không khả dụng. Kiểm tra kết nối mạng.")
+        guard let recognizer = SFSpeechRecognizer(locale: Locale(identifier: localeIdentifier)), recognizer.isAvailable else {
+            onError?(localeIdentifier.hasPrefix("zh")
+                     ? "Nhận dạng tiếng Trung đang không khả dụng. Kiểm tra kết nối mạng."
+                     : "Nhận dạng giọng nói cho ngôn ngữ này đang không khả dụng. Kiểm tra kết nối mạng.")
             return
         }
 

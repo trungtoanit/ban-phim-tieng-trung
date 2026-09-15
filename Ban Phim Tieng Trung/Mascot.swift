@@ -278,6 +278,8 @@ struct PandaDrawing {
 struct MascotView: View {
     var mood: MascotMood
     var size: CGFloat = 64
+    /// Tắt cử động ở chỗ hiện lâu (widget màn hình chính) cho đỡ tốn pin và đỡ giật.
+    var animated = true
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var phase = false
@@ -329,7 +331,7 @@ struct MascotView: View {
     private func startMotion() {
         // Cùng mẹo với FlameView: đặt về false rồi mới bật ở nhịp sau, không thì animation không chạy lại.
         phase = false
-        guard !reduceMotion else { return }
+        guard animated, !reduceMotion else { return }
         let animation = motion
         DispatchQueue.main.async {
             withAnimation(animation.repeatForever(autoreverses: true)) { phase = true }

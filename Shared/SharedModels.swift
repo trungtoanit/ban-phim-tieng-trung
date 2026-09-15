@@ -266,8 +266,19 @@ enum StreakStore {
     static let streakMinimum = 5
 
     static let goalKey = "dailyGoalSentences"
-    static let defaultGoal = 10
-    static let goalChoices = [5, 10, 20, 30]
+    static let defaultGoal = 100
+    static let goalChoices = [30, 50, 100, 150]
+    private static let goalRaisedKey = "dailyGoalRaisedTo100"
+
+    /// Mục tiêu cũ (5–30 câu) quá thấp so với nhịp mới 100 câu/ngày: nâng lên một lần.
+    /// Sau đó người dùng vẫn tự chỉnh được trong màn Chuỗi ngày.
+    static func raiseGoalIfNeeded() {
+        guard !store.bool(forKey: goalRaisedKey) else { return }
+        store.set(true, forKey: goalRaisedKey)
+        if store.integer(forKey: goalKey) < defaultGoal {
+            goal = defaultGoal
+        }
+    }
 
     private static let logKey = "dailyLog"
     private static let bestKey = "bestStreak"

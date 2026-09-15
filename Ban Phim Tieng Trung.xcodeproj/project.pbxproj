@@ -17,11 +17,6 @@
 		B10000000000000000000104 /* PracticeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000007 /* PracticeView.swift */; };
 		B10000000000000000000105 /* phrases.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000008 /* phrases.json */; };
 		B10000000000000000000106 /* NaturalSpeaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* NaturalSpeaker.swift */; };
-		B10000000000000000000321 /* WordPopup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000322 /* WordPopup.swift */; };
-		B10000000000000000000331 /* PronunciationDrillView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000332 /* PronunciationDrillView.swift */; };
-		B10000000000000000000341 /* PinyinToneDrills.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000342 /* PinyinToneDrills.swift */; };
-		B10000000000000000000361 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000362 /* SplashView.swift */; };
-		B10000000000000000000301 /* Mascot.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000302 /* Mascot.swift */; };
 		B10000000000000000000107 /* VoiceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* VoiceSettingsView.swift */; };
 		B10000000000000000000108 /* ChinesePinyin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* ChinesePinyin.swift */; };
 		B10000000000000000000109 /* pinyin-dict.json in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000C /* pinyin-dict.json */; };
@@ -33,10 +28,6 @@
 		B10000000000000000000110 /* SharedModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000010 /* SharedModels.swift */; };
 		B10000000000000000000111 /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000011 /* SharedStore.swift */; };
 		B10000000000000000000112 /* RubyText.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000012 /* RubyText.swift */; };
-		B10000000000000000000311 /* PronunciationLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000313 /* PronunciationLog.swift */; };
-		B10000000000000000000312 /* PronunciationLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000313 /* PronunciationLog.swift */; };
-		B10000000000000000000314 /* PinyinGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000315 /* PinyinGuide.swift */; };
-		B10000000000000000000316 /* PronunciationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000317 /* PronunciationViews.swift */; };
 		B10000000000000000000113 /* PhraseMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* PhraseMatcher.swift */; };
 		B10000000000000000000120 /* KeyboardViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000020 /* KeyboardViewController.swift */; };
 		B10000000000000000000121 /* KeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000021 /* KeyboardView.swift */; };
@@ -52,9 +43,23 @@
 		B10000000000000000000138 /* hanviet.json in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* hanviet.json */; };
 		B10000000000000000000139 /* replies.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000026 /* replies.json */; };
 		B10000000000000000000140 /* BanPhimTrungKeyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B10000000000000000000025 /* BanPhimTrungKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B100000000000000000004B1 /* Interpreter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000004B2 /* Interpreter.swift */; };
+		B10000000000000000000301 /* Mascot.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000302 /* Mascot.swift */; };
+		B10000000000000000000311 /* PronunciationLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000313 /* PronunciationLog.swift */; };
+		B10000000000000000000312 /* PronunciationLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000313 /* PronunciationLog.swift */; };
+		B10000000000000000000314 /* PinyinGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000315 /* PinyinGuide.swift */; };
+		B10000000000000000000316 /* PronunciationViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000317 /* PronunciationViews.swift */; };
+		B10000000000000000000321 /* WordPopup.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000322 /* WordPopup.swift */; };
+		B10000000000000000000331 /* PronunciationDrillView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000332 /* PronunciationDrillView.swift */; };
+		B10000000000000000000341 /* PinyinToneDrills.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000342 /* PinyinToneDrills.swift */; };
+		B10000000000000000000361 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000362 /* SplashView.swift */; };
+		B10000000000000000000371 /* Vocabulary.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000372 /* Vocabulary.swift */; };
+		B10000000000000000000381 /* HomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000382 /* HomeScreen.swift */; };
+		B10000000000000000000391 /* AboutView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000392 /* AboutView.swift */; };
 		B10000000000000000000401 /* MistakeExplainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000403 /* MistakeExplainer.swift */; };
 		B10000000000000000000402 /* MistakeExplainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000403 /* MistakeExplainer.swift */; };
 		B10000000000000000000404 /* PinyinGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000315 /* PinyinGuide.swift */; };
+		B100000000000000000004A1 /* VoiceMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000004A2 /* VoiceMode.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -95,11 +100,6 @@
 		B10000000000000000000007 /* PracticeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeView.swift; sourceTree = "<group>"; };
 		B10000000000000000000008 /* phrases.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = phrases.json; sourceTree = "<group>"; };
 		B10000000000000000000009 /* NaturalSpeaker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NaturalSpeaker.swift; sourceTree = "<group>"; };
-		B10000000000000000000322 /* WordPopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordPopup.swift; sourceTree = "<group>"; };
-		B10000000000000000000332 /* PronunciationDrillView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PronunciationDrillView.swift; sourceTree = "<group>"; };
-		B10000000000000000000342 /* PinyinToneDrills.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinyinToneDrills.swift; sourceTree = "<group>"; };
-		B10000000000000000000362 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
-		B10000000000000000000302 /* Mascot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mascot.swift; sourceTree = "<group>"; };
 		B1000000000000000000000A /* VoiceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSettingsView.swift; sourceTree = "<group>"; };
 		B1000000000000000000000B /* ChinesePinyin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChinesePinyin.swift; sourceTree = "<group>"; };
 		B1000000000000000000000C /* pinyin-dict.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "pinyin-dict.json"; sourceTree = "<group>"; };
@@ -109,9 +109,6 @@
 		B10000000000000000000010 /* SharedModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedModels.swift; sourceTree = "<group>"; };
 		B10000000000000000000011 /* SharedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedStore.swift; sourceTree = "<group>"; };
 		B10000000000000000000012 /* RubyText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RubyText.swift; sourceTree = "<group>"; };
-		B10000000000000000000313 /* PronunciationLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PronunciationLog.swift; sourceTree = "<group>"; };
-		B10000000000000000000315 /* PinyinGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinyinGuide.swift; sourceTree = "<group>"; };
-		B10000000000000000000317 /* PronunciationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PronunciationViews.swift; sourceTree = "<group>"; };
 		B10000000000000000000013 /* PhraseMatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhraseMatcher.swift; sourceTree = "<group>"; };
 		B10000000000000000000014 /* ConversationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationView.swift; sourceTree = "<group>"; };
 		B10000000000000000000016 /* OpenAIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIClient.swift; sourceTree = "<group>"; };
@@ -122,7 +119,20 @@
 		B10000000000000000000024 /* BanPhimTrungKeyboard.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BanPhimTrungKeyboard.entitlements; sourceTree = "<group>"; };
 		B10000000000000000000025 /* BanPhimTrungKeyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BanPhimTrungKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10000000000000000000026 /* replies.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = replies.json; sourceTree = "<group>"; };
+		B100000000000000000004B2 /* Interpreter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Interpreter.swift; sourceTree = "<group>"; };
+		B10000000000000000000302 /* Mascot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mascot.swift; sourceTree = "<group>"; };
+		B10000000000000000000313 /* PronunciationLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PronunciationLog.swift; sourceTree = "<group>"; };
+		B10000000000000000000315 /* PinyinGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinyinGuide.swift; sourceTree = "<group>"; };
+		B10000000000000000000317 /* PronunciationViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PronunciationViews.swift; sourceTree = "<group>"; };
+		B10000000000000000000322 /* WordPopup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WordPopup.swift; sourceTree = "<group>"; };
+		B10000000000000000000332 /* PronunciationDrillView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PronunciationDrillView.swift; sourceTree = "<group>"; };
+		B10000000000000000000342 /* PinyinToneDrills.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinyinToneDrills.swift; sourceTree = "<group>"; };
+		B10000000000000000000362 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
+		B10000000000000000000372 /* Vocabulary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Vocabulary.swift; sourceTree = "<group>"; };
+		B10000000000000000000382 /* HomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreen.swift; sourceTree = "<group>"; };
+		B10000000000000000000392 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		B10000000000000000000403 /* MistakeExplainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MistakeExplainer.swift; sourceTree = "<group>"; };
+		B100000000000000000004A2 /* VoiceMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceMode.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -180,6 +190,11 @@
 				B10000000000000000000016 /* OpenAIClient.swift */,
 				B10000000000000000000009 /* NaturalSpeaker.swift */,
 				B10000000000000000000302 /* Mascot.swift */,
+				B100000000000000000004B2 /* Interpreter.swift */,
+				B100000000000000000004A2 /* VoiceMode.swift */,
+				B10000000000000000000392 /* AboutView.swift */,
+				B10000000000000000000382 /* HomeScreen.swift */,
+				B10000000000000000000372 /* Vocabulary.swift */,
 				B10000000000000000000362 /* SplashView.swift */,
 				B10000000000000000000342 /* PinyinToneDrills.swift */,
 				B10000000000000000000332 /* PronunciationDrillView.swift */,
@@ -355,6 +370,11 @@
 				B1000000000000000000010F /* OpenAIClient.swift in Sources */,
 				B10000000000000000000106 /* NaturalSpeaker.swift in Sources */,
 				B10000000000000000000301 /* Mascot.swift in Sources */,
+				B100000000000000000004B1 /* Interpreter.swift in Sources */,
+				B100000000000000000004A1 /* VoiceMode.swift in Sources */,
+				B10000000000000000000391 /* AboutView.swift in Sources */,
+				B10000000000000000000381 /* HomeScreen.swift in Sources */,
+				B10000000000000000000371 /* Vocabulary.swift in Sources */,
 				B10000000000000000000361 /* SplashView.swift in Sources */,
 				B10000000000000000000341 /* PinyinToneDrills.swift in Sources */,
 				B10000000000000000000331 /* PronunciationDrillView.swift in Sources */,

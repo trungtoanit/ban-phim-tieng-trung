@@ -116,6 +116,7 @@ struct ConversationTopicsView: View {
                 StreakReminder.reschedule()
             }
             .navigationTitle("Hội thoại AI")
+            .homeBackButton()
             .toolbar {
                 Button {
                     showSettings = true
@@ -395,6 +396,8 @@ struct ConversationView: View {
     @State private var savedCount = 0
     @State private var confirmRestart = false
     @State private var showSettings = false
+    /// Chế độ rảnh tay toàn màn hình kiểu ChatGPT Voice.
+    @State private var voiceMode = false
 
     init(scenario: Scenario) {
         _session = StateObject(wrappedValue: AIConversationSession(scenario: scenario))
@@ -453,8 +456,17 @@ struct ConversationView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle(session.scenario.title)
         .navigationBarTitleDisplayMode(.inline)
+        .fullScreenCover(isPresented: $voiceMode) {
+            VoiceModeView(session: session)
+        }
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    voiceMode = true
+                } label: {
+                    Image(systemName: "waveform.circle.fill")
+                }
+                .accessibilityLabel("Chế độ rảnh tay")
                 Button {
                     session.finish()
                 } label: {
@@ -528,7 +540,7 @@ struct ConversationView: View {
                 session.resume()
             } label: {
                 Label("Nói tiếp — đã đi được \(session.savedTurns) lượt", systemImage: "mic.fill")
-                    .font(.headline)
+                    .font(.subheadline.weight(.semibold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
             }
@@ -538,7 +550,7 @@ struct ConversationView: View {
             Button("Bỏ đoạn này, nói lại từ đầu") {
                 confirmRestart = true
             }
-            .font(.footnote)
+            .font(.caption)
             .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 16)
@@ -565,7 +577,7 @@ struct ConversationView: View {
                 ForEach(Array(summary.keepers.enumerated()), id: \.offset) { _, line in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(alignment: .top) {
-                            ruby(line, size: 17)
+                            ruby(line, size: 15)
                             Spacer(minLength: 4)
                             speakButton(line)
                         }
@@ -618,7 +630,7 @@ struct ConversationView: View {
     private var header: some View {
         VStack(spacing: 4) {
             Text(session.scenario.partnerEmoji)
-                .font(.system(size: 40))
+                .font(.system(size: 34))
             Text("Bạn là \(session.scenario.userRole.lowercased()), nói chuyện với \(session.scenario.partnerRole.lowercased())")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -640,12 +652,12 @@ struct ConversationView: View {
         case .partner:
             HStack(alignment: .top, spacing: 8) {
                 Text(session.scenario.partnerEmoji)
-                    .font(.system(size: 28))
+                    .font(.system(size: 24))
                 VStack(alignment: .leading, spacing: 6) {
-                    ruby(message.line, size: 22)
+                    ruby(message.line, size: 19)
                     HStack(alignment: .top) {
                         Text(message.line.vi)
-                            .font(.footnote)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer(minLength: 8)
                         speakButton(message.line, thenListen: session.messages.last?.id == message.id)
@@ -664,7 +676,7 @@ struct ConversationView: View {
                 Spacer(minLength: 40)
                 VStack(alignment: .leading, spacing: 8) {
                     if ChineseText.containsHan(message.line.zh) {
-                        ruby(message.line, size: 20)
+                        ruby(message.line, size: 17)
                         if !message.line.vi.isEmpty {
                             Text(message.line.vi)
                                 .font(.caption)
@@ -687,7 +699,7 @@ struct ConversationView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.green)
                             HStack(alignment: .top) {
-                                ruby(corrected, size: 18)
+                                ruby(corrected, size: 16)
                                 Spacer(minLength: 4)
                                 speakButton(corrected)
                             }
@@ -762,7 +774,7 @@ struct ConversationView: View {
                 ForEach(Array(message.hints.enumerated()), id: \.offset) { _, hint in
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(alignment: .top) {
-                            ruby(hint, size: 17)
+                            ruby(hint, size: 15)
                             Spacer(minLength: 4)
                             speakButton(hint)
                         }
