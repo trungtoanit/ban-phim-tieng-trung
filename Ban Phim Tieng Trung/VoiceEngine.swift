@@ -281,6 +281,8 @@ final class VoiceEngine: ObservableObject {
         state.partialText = ""
         state.liveChinese = ""
         state.liveWords = []
+        state.liveMeaning = ""
+        state.meaning = ""
         state.sourceText = ""
         state.chineseText = ""
         state.pinyin = ""
@@ -342,6 +344,8 @@ final class VoiceEngine: ObservableObject {
         state.partialText = ""
         state.liveChinese = ""
         state.liveWords = []
+        state.liveMeaning = ""
+        state.meaning = ""
         state.level = 0
         publish()
     }
@@ -379,22 +383,22 @@ final class VoiceEngine: ObservableObject {
         let source = state.partialText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !source.isEmpty, source != liveSource else { return }
 
-        // Nói thẳng tiếng Trung: chỉ cần hiện pinyin, không phải dịch.
-        guard let sourceCode = state.mode.sourceLanguageCode else {
-            liveSource = source
+        let sourceCode = state.mode.sourceLanguageCode
+        // Nói thẳng tiếng Trung: hiện pinyin ngay, còn nghĩa tiếng Việt thì dịch ở dưới.
+        if sourceCode == nil {
             state.liveWords = ChineseText.words(for: source)
             publish()
-            return
         }
         // Mỗi lúc chỉ một yêu cầu; xong sẽ tự dịch lại nếu người dùng đã nói thêm.
         guard !liveInFlight else { return }
         liveInFlight = true
         liveSource = source
 
-        let liveTarget = script.translateCode
+        let fromCode = sourceCode ?? "zh-CN"
+        let toCode = sourceCode == nil ? "vi" : script.translateCode
         let livePolite = polite
         Task {
-            let translated = try? await Translator.translate(source, from: sourceCode, to: liveTarget)
+            let translated = try? await Translator.translate(source, from: fromCode, to: toCode)
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 self.liveInFlight = false
@@ -403,9 +407,13 @@ final class VoiceEngine: ObservableObject {
                       self.state.chineseText.isEmpty
                 else { return }
                 if let translated {
-                    let text = ChineseRegister.apply(translated, polite: livePolite)
-                    self.state.liveChinese = text
-                    self.state.liveWords = ChineseText.words(for: text)
+                    if sourceCode == nil {
+                        self.state.liveMeaning = translated
+                    } else {
+                        let text = ChineseRegister.apply(translated, polite: livePolite)
+                        self.state.liveChinese = text
+                        self.state.liveWords = ChineseText.words(for: text)
+                    }
                     self.liveTranslatedSource = source
                     self.publish()
                 }
@@ -530,6 +538,24 @@ final class VoiceEngine: ObservableObject {
         state.pinyin = state.pinyinWords.map(\.py).joined(separator: " ")
         state.phase = .result
         lastActivity = Date()
+
+        // Chế độ 中文: dịch ngược sang tiếng Việt để người học kiểm tra mình nói đúng ý chưa.
+        if state.mode.sourceLanguageCode == nil {
+            let liveMeaning = state.liveMeaning
+            state.liveMeaning = ""
+            if chinese == liveTranslatedSource, !liveMeaning.isEmpty {
+                state.meaning = liveMeaning
+            } else {
+                Task {
+                    let meaning = try? await Translator.translate(chinese, from: "zh-CN", to: "vi")
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.state.requestID == requestID, self.state.chineseText == chinese else { return }
+                        self.state.meaning = meaning ?? "Không dịch được nghĩa — kiểm tra kết nối mạng."
+                        self.publish()
+                    }
+                }
+            }
+        }
         publish()
 
         history.insert(HistoryItem(source: state.sourceText, chinese: chinese, words: state.pinyinWords), at: 0)

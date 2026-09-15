@@ -138,7 +138,9 @@ struct KeyboardView: View {
         case let .result(words, chinese, source):
             cardWithActions(close: nil) {
                 ruby(words)
-                if source != chinese {
+                if let meaning = model.spokenChineseMeaning {
+                    meaningLine(meaning.isEmpty ? nil : meaning)
+                } else if source != chinese {
                     Text(source)
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
@@ -178,6 +180,25 @@ struct KeyboardView: View {
         }
     }
 
+    /// Nghĩa tiếng Việt của câu tiếng Trung vừa nói — người đọc tin nhắn sẽ hiểu như vậy.
+    private func meaningLine(_ meaning: String?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text("Người đọc sẽ hiểu:")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(KeyColors.brand)
+            if let meaning {
+                Text(meaning)
+                    .font(.system(size: 13))
+                    .foregroundColor(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("đang dịch…")
+                    .font(.system(size: 12))
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+
     /// Vừa nói vừa hiện: tiếng Việt máy đang nghe (nhỏ) và tiếng Trung dịch tạm kèm pinyin (lớn).
     private func liveTranscript(text: String, live: [PinyinWord]) -> some View {
         ScrollViewReader { proxy in
@@ -200,6 +221,10 @@ struct KeyboardView: View {
                             showHanViet: model.showHanViet
                         )
                         .opacity(0.85)
+                    }
+                    if !model.liveMeaning.isEmpty {
+                        meaningLine(model.liveMeaning)
+                            .opacity(0.85)
                     }
                     Color.clear.frame(height: 1).id("live-bottom")
                 }

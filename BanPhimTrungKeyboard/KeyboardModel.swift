@@ -104,6 +104,8 @@ final class KeyboardModel: ObservableObject {
     @Published private var panel: Panel?
     /// Câu giọng nói sau khi người dùng sửa từ bị đánh dấu đỏ.
     @Published private var correctedWords: [PinyinWord]?
+    /// Nghĩa tiếng Việt của câu sau khi sửa (chế độ 中文); nil khi chưa sửa, rỗng khi đang dịch.
+    @Published private var correctedMeaning: String?
     @Published var hasFullAccess = true
     @Published var needsGlobeKey = true
     @Published var showHanViet = SharedSettings.showHanViet
@@ -187,6 +189,17 @@ final class KeyboardModel: ObservableObject {
 
     var canSave: Bool { saveable != nil }
 
+    /// Chế độ 中文: nghĩa tiếng Việt của câu vừa nói (rỗng khi đang dịch), nil ở các chế độ khác.
+    var spokenChineseMeaning: String? {
+        guard panel == nil, state.mode == .chinese, state.requestID == activeRequestID, state.phase == .result else { return nil }
+        return correctedWords == nil ? state.meaning : (correctedMeaning ?? "")
+    }
+
+    /// Chế độ 中文: nghĩa tiếng Việt tạm trong lúc đang nói.
+    var liveMeaning: String {
+        state.mode == .chinese ? state.liveMeaning : ""
+    }
+
     /// Đọc to câu tiếng Trung đang hiện để nghe thử trước khi gửi.
     func speakCurrent() {
         guard let zh = saveable?.zh, !zh.isEmpty else { return }
@@ -250,6 +263,7 @@ final class KeyboardModel: ObservableObject {
            !newState.chineseText.isEmpty {
             insertedRequestID = requestID
             correctedWords = nil
+            correctedMeaning = nil
             controller?.insert(newState.chineseText)
             lastInserted = newState.chineseText
             lastReplaced = ""
@@ -265,6 +279,7 @@ final class KeyboardModel: ObservableObject {
         haptic.impactOccurred()
         closePanels()
         correctedWords = nil
+        correctedMeaning = nil
 
         guard appAlive else {
             // Nhớ ý định này lại: mở app xong quay về đây là ghi âm luôn.
@@ -509,6 +524,17 @@ final class KeyboardModel: ObservableObject {
         }
 
         correctedWords = words
+        if state.mode == .chinese {
+            let sentence = words.map(\.zh).joined()
+            correctedMeaning = ""
+            Task {
+                let meaning = try? await Translator.translate(sentence, from: "zh-CN", to: "vi")
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.correctedWords?.map(\.zh).joined() == sentence else { return }
+                    self.correctedMeaning = meaning ?? "Không dịch được nghĩa — kiểm tra kết nối mạng."
+                }
+            }
+        }
         lastInserted = words.map(\.zh).joined()
         lastReplaced = ""
         canUndo = true
