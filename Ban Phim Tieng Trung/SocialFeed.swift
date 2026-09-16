@@ -11,6 +11,94 @@ import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
+// MARK: - Link trong chữ
+
+/// Tìm link http/https trong chữ và dựng AttributedString bấm được (mở Safari).
+enum SocialLinks {
+    private static let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+    /// Dấu câu hay dính ở cuối link khi viết liền (tiếng Trung / tiếng Việt).
+    private static let trailing = CharacterSet(charactersIn: "。，、,.!！?？;；:：)）]】}\"'」』>…")
+
+    struct Match {
+        let range: Range<String.Index>
+        let url: URL
+    }
+
+    static func matches(in text: String) -> [Match] {
+        guard let detector, text.contains(".") else { return [] }
+        let ns = NSRange(text.startIndex..., in: text)
+        return detector.matches(in: text, options: [], range: ns).compactMap { result -> Match? in
+            guard let range = Range(result.range, in: text) else { return nil }
+            var raw = String(text[range])
+            var end = range.upperBound
+            while let last = raw.unicodeScalars.last, trailing.contains(last) {
+                raw.unicodeScalars.removeLast()
+                end = text.index(before: end)
+            }
+            guard !raw.isEmpty, end > range.lowerBound else { return nil }
+            var candidate = raw
+            if !candidate.lowercased().hasPrefix("http://") && !candidate.lowercased().hasPrefix("https://") {
+                // "www.abc.com" → https
+                guard result.url?.scheme?.lowercased().hasPrefix("http") == true else { return nil }
+                candidate = "https://" + candidate
+            }
+            guard let url = URL(string: candidate), let scheme = url.scheme?.lowercased(),
+                  scheme == "http" || scheme == "https" else { return nil }
+            return Match(range: range.lowerBound..<end, url: url)
+        }
+    }
+
+    static func containsLink(_ text: String) -> Bool { !matches(in: text).isEmpty }
+
+    /// Chữ thường + link màu xanh gạch chân.
+    static func attributed(_ text: String) -> AttributedString {
+        var result = AttributedString()
+        var cursor = text.startIndex
+        for match in matches(in: text) {
+            if cursor < match.range.lowerBound {
+                result += AttributedString(String(text[cursor..<match.range.lowerBound]))
+            }
+            var link = AttributedString(String(text[match.range]))
+            link.link = match.url
+            link.foregroundColor = .blue
+            link.underlineStyle = .single
+            result += link
+            cursor = match.range.upperBound
+        }
+        if cursor < text.endIndex {
+            result += AttributedString(String(text[cursor...]))
+        }
+        return result
+    }
+}
+
+/// Chữ có link bấm được. Dòng có chữ Hán mà không có link thì (nếu `ruby`) hiện pinyin;
+/// dòng có link thì hiện chữ thường để link không bị tách thành từng từ pinyin.
+struct LinkedRichText: View {
+    let text: String
+    var hanziSize: CGFloat = 18
+    var showHanViet = false
+    var font: Font = .body
+    var ruby = true
+    var onTapWord: ((PinyinWord) -> Void)?
+
+    var body: some View {
+        let lines = text.components(separatedBy: "\n")
+        VStack(alignment: .leading, spacing: 4) {
+            ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                if ruby, ChineseText.containsHan(line), !SocialLinks.containsLink(line) {
+                    RubyText(words: ChineseText.words(for: line), hanziSize: hanziSize, pinyinColor: .blue,
+                             showHanViet: showHanViet, onTapWord: onTapWord)
+                } else if !line.isEmpty {
+                    Text(SocialLinks.attributed(line))
+                        .font(font)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Ảnh
 
 enum SocialImageCompressor {
@@ -571,7 +659,10 @@ struct PostCard: View {
 
     @ViewBuilder
     private var postText: some View {
-        if ChineseText.containsHan(post.text), post.text.count <= 200, !post.text.contains("\n") {
+        if SocialLinks.containsLink(post.text) {
+            // Có link: dòng có link hiện chữ thường bấm được, dòng tiếng Trung khác vẫn có pinyin.
+            LinkedRichText(text: post.text, hanziSize: 18, showHanViet: showHanViet, ruby: post.text.count <= 400)
+        } else if ChineseText.containsHan(post.text), post.text.count <= 200, !post.text.contains("\n") {
             RubyText(words: ChineseText.words(for: post.text), hanziSize: 18, pinyinColor: .blue, showHanViet: showHanViet)
         } else {
             Text(post.text)
@@ -752,7 +843,7 @@ struct PostCard: View {
                     .buttonStyle(.plain)
             }
             ForEach(post.comments) { comment in
-                (Text(comment.user.name).fontWeight(.semibold) + Text("  ") + Text(comment.text))
+                (Text(comment.user.name).fontWeight(.semibold) + Text("  ") + Text(SocialLinks.attributed(comment.text)))
                     .font(.caption)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -861,7 +952,7 @@ struct PostCommentsSheet: View {
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
-                Text(comment.text)
+                Text(SocialLinks.attributed(comment.text))
                     .font(.subheadline)
                     .fixedSize(horizontal: false, vertical: true)
             }

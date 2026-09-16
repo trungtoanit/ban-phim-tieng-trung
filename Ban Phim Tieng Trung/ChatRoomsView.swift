@@ -607,6 +607,16 @@ final class RoomChatModel: ObservableObject {
         self.room = room
     }
 
+    private var linkCache: [Int: Bool] = [:]
+
+    /// Tin có link http/https (dò một lần rồi nhớ).
+    func hasLink(_ message: RoomMessage) -> Bool {
+        if let cached = linkCache[message.id] { return cached }
+        let found = SocialLinks.containsLink(message.text)
+        linkCache[message.id] = found
+        return found
+    }
+
     func words(for message: RoomMessage) -> [PinyinWord]? {
         if let cached = wordsCache[message.id] { return cached }
         guard ChineseText.containsHan(message.text) else { return nil }
@@ -1594,7 +1604,11 @@ struct RoomChatView: View {
     @ViewBuilder
     private func messageText(_ message: RoomMessage) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            if let words = model.words(for: message) {
+            if model.hasLink(message) {
+                LinkedRichText(text: message.text, hanziSize: 19, showHanViet: showHanViet) {
+                    selectedWord = SelectedWord(word: $0)
+                }
+            } else if let words = model.words(for: message) {
                 RubyText(words: words, hanziSize: 19, pinyinColor: .blue, showHanViet: showHanViet) {
                     selectedWord = SelectedWord(word: $0)
                 }
