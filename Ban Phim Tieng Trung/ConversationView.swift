@@ -169,7 +169,8 @@ struct ConversationTopicsView: View {
                     webSection
                 }
 
-                if !store.customTitles.isEmpty {
+                // Đã đăng nhập: chỉ dùng tình huống trên website, ẩn danh sách chỉ lưu trên máy.
+                if !web.isSignedIn, !store.customTitles.isEmpty {
                     Section {
                         ForEach(store.customTitles, id: \.self) { title in
                             Button {
@@ -189,7 +190,7 @@ struct ConversationTopicsView: View {
                         }
                         .onDelete(perform: store.removeCustom)
                     } header: {
-                        Label(web.isSignedIn ? "Chỉ trên máy này" : "Tình huống của bạn", systemImage: "list.bullet")
+                        Label("Tình huống của bạn", systemImage: "list.bullet")
                     } footer: {
                         Text("Được lưu trên máy. Nói đủ \(ScenarioStore.targetSentences) câu thì tình huống tự xoá khi thoát ra. Vuốt sang trái để xoá ngay.")
                     }
