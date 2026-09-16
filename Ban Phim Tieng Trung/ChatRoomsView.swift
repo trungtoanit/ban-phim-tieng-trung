@@ -585,6 +585,33 @@ final class RoomChatModel: ObservableObject {
         room.lastMessageAt = message.createdAt
     }
 
+    // MARK: Dịch tin
+
+    /// Nghĩa tiếng Việt đã dịch (theo id tin) và những tin đang hiện bản dịch.
+    @Published var translations: [Int: String] = [:]
+    @Published var shownTranslations: Set<Int> = []
+    @Published var translatingIDs: Set<Int> = []
+
+    /// Bấm "Dịch": chưa có thì dịch rồi hiện; đang hiện thì ẩn.
+    func toggleTranslation(_ message: RoomMessage) {
+        if shownTranslations.contains(message.id) {
+            shownTranslations.remove(message.id)
+            return
+        }
+        shownTranslations.insert(message.id)
+        guard translations[message.id] == nil, !translatingIDs.contains(message.id) else { return }
+        translatingIDs.insert(message.id)
+        Task {
+            defer { translatingIDs.remove(message.id) }
+            do {
+                translations[message.id] = try await SocialAPI.translate(text: message.text, to: "vi")
+            } catch {
+                shownTranslations.remove(message.id)
+                if !(error is CancellationError) { errorMessage = error.localizedDescription }
+            }
+        }
+    }
+
     // MARK: Đang gõ
 
     /// Những người khác đang gõ.
@@ -947,6 +974,10 @@ struct RoomChatView: View {
         // Hỏi tin mới mỗi 3 giây khi đang mở phòng; rời màn hình thì .task tự huỷ vòng lặp.
         .task {
             await model.load()
+            // Lần trước bật rảnh tay thì mở micro lại khi đã vào phòng (xin quyền như hội thoại AI).
+            if voice.handsFree, !voice.isListening {
+                voice.listen()
+            }
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
                 guard !Task.isCancelled else { break }
@@ -1272,7 +1303,10 @@ struct RoomChatView: View {
                         Text(SocialFormat.time(message.createdAt))
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
-                        if hasHan { speakButton(message) }
+                        if hasHan {
+                            speakButton(message)
+                            translateButton(message)
+                        }
                     }
                 }
 
@@ -1324,6 +1358,15 @@ struct RoomChatView: View {
                             } label: {
                                 Label("Nghe", systemImage: "speaker.wave.2")
                             }
+                            Button {
+                                model.toggleTranslation(message)
+                            } label: {
+                                if model.shownTranslations.contains(message.id) {
+                                    Label("Ẩn bản dịch", systemImage: "character.bubble")
+                                } else {
+                                    Label("Dịch sang tiếng Việt", systemImage: "character.bubble")
+                                }
+                            }
                         }
                         Button {
                             UIPasteboard.general.string = message.text
@@ -1342,7 +1385,10 @@ struct RoomChatView: View {
 
                 if message.mine {
                     HStack(spacing: 6) {
-                        if hasHan { speakButton(message) }
+                        if hasHan {
+                            speakButton(message)
+                            translateButton(message)
+                        }
                         Text(SocialFormat.time(message.createdAt))
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
@@ -1405,18 +1451,61 @@ struct RoomChatView: View {
         .accessibilityLabel("Nghe")
     }
 
+    /// Nút "Dịch" nhỏ cạnh nút loa: hiện / ẩn nghĩa tiếng Việt dưới tin.
+    private func translateButton(_ message: RoomMessage) -> some View {
+        let shown = model.shownTranslations.contains(message.id)
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) { model.toggleTranslation(message) }
+        } label: {
+            Text("Dịch")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(shown ? .white : socialRed)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(shown ? socialRed : socialRed.opacity(0.12)))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(shown ? "Ẩn bản dịch" : "Dịch sang tiếng Việt")
+    }
+
     /// Có chữ Hán thì hiện pinyin xanh phía trên từng từ; chạm vào từ để xem nghĩa.
+    /// Đã bấm "Dịch" thì nghĩa tiếng Việt hiện bên dưới.
     @ViewBuilder
     private func messageText(_ message: RoomMessage) -> some View {
-        if let words = model.words(for: message) {
-            RubyText(words: words, hanziSize: 19, pinyinColor: .blue, showHanViet: showHanViet) {
-                selectedWord = SelectedWord(word: $0)
+        VStack(alignment: .leading, spacing: 6) {
+            if let words = model.words(for: message) {
+                RubyText(words: words, hanziSize: 19, pinyinColor: .blue, showHanViet: showHanViet) {
+                    selectedWord = SelectedWord(word: $0)
+                }
+            } else {
+                Text(message.text)
+                    .font(.body)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-        } else {
-            Text(message.text)
-                .font(.body)
-                .fixedSize(horizontal: false, vertical: true)
+            if model.shownTranslations.contains(message.id) {
+                Group {
+                    if let vi = model.translations[message.id] {
+                        Text(vi)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    } else {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.mini)
+                            Text("Đang dịch…").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(.top, 4)
+                .overlay(alignment: .top) {
+                    Rectangle().fill(Color(.separator)).frame(height: 0.5).offset(y: -2)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: model.translations[message.id])
     }
 }
 
@@ -1426,11 +1515,9 @@ struct RoomChatView: View {
 /// micro lớn nói tiếng Trung (gửi luôn), micro VI nói tiếng Việt (dịch rồi xác nhận), ∞ rảnh tay.
 @MainActor
 final class RoomVoiceModel: ObservableObject {
-    static let handsFreeKey = "roomChatHandsFree"
-
-    /// Rảnh tay: gửi xong một câu là micro tự mở lại.
-    @Published var handsFree = UserDefaults.standard.bool(forKey: RoomVoiceModel.handsFreeKey) {
-        didSet { UserDefaults.standard.set(handsFree, forKey: Self.handsFreeKey) }
+    /// Rảnh tay: gửi xong một câu là micro tự mở lại. Nhớ theo tài khoản.
+    @Published var handsFree = RoomChatPrefs.handsFree {
+        didSet { RoomChatPrefs.handsFree = handsFree }
     }
     /// Đang nghe tiếng Việt (micro VI).
     @Published private(set) var isAskingInVietnamese = false
@@ -1674,7 +1761,8 @@ private struct RoomComposer: View {
     @ObservedObject var voice: RoomVoiceModel
     @Binding var focused: Bool
 
-    @AppStorage("roomChatTextMode") private var textMode = false
+    /// Gõ chữ hay nói: nhớ theo tài khoản.
+    @State private var textMode = RoomChatPrefs.textMode
     @State private var draft = ""
     @FocusState private var fieldFocused: Bool
     @State private var showGifts = false
@@ -1741,7 +1829,10 @@ private struct RoomComposer: View {
             if id != nil, textMode { fieldFocused = true }
         }
         .onAppear { voice.typing = textMode }
-        .onChange(of: textMode) { voice.typing = $0 }
+        .onChange(of: textMode) {
+            voice.typing = $0
+            RoomChatPrefs.textMode = $0
+        }
         .confirmationDialog("Gửi ảnh", isPresented: $choosingPhotoSource) {
             Button("Chọn từ thư viện") { pickingPhoto = true }
             Button("Chụp ảnh") { showCamera = true }
@@ -2273,5 +2364,27 @@ private struct TypingIndicator: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label)
+    }
+}
+
+// MARK: - Nhớ cách nhập theo tài khoản
+
+/// Lựa chọn ô soạn tin (gõ chữ / micro, rảnh tay), lưu theo tài khoản web: "chatPrefs.<userId>".
+enum RoomChatPrefs {
+    private static var key: String { "chatPrefs.\(WebAccountStore.shared.user?.id ?? 0)" }
+
+    private static var values: [String: Bool] {
+        get { UserDefaults.standard.dictionary(forKey: key) as? [String: Bool] ?? [:] }
+        set { UserDefaults.standard.set(newValue, forKey: key) }
+    }
+
+    static var textMode: Bool {
+        get { values["textMode"] ?? false }
+        set { values["textMode"] = newValue }
+    }
+
+    static var handsFree: Bool {
+        get { values["handsFree"] ?? false }
+        set { values["handsFree"] = newValue }
     }
 }

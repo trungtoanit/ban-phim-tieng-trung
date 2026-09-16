@@ -496,6 +496,7 @@ enum SocialAPI {
         let typing: [RoomMessage.User]?
         // Dịch
         let zh: String?
+        let vi: String?
         // Bảng tin
         let posts: [FeedPost]?
         let post: FeedPost?
@@ -721,11 +722,14 @@ enum SocialAPI {
     // MARK: Dịch (nói tiếng Việt trong phòng chat)
 
     /// Dịch câu sang tiếng Trung để người học xác nhận trước khi gửi vào phòng.
+    /// `to` = "zh": câu tiếng Trung (máy chủ trả `zh`); `to` = "vi": nghĩa tiếng Việt (máy chủ trả `vi`).
     static func translate(text: String, to language: String = "zh") async throws -> String {
-        let zh = try await call("translate", ["text": text, "to": language]).zh?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !zh.isEmpty else { throw WebBackendError(message: "Chưa dịch được câu này. Hãy thử nói lại.") }
-        return zh
+        let e = try await call("translate", ["text": text, "to": language])
+        let result = ((language == "vi" ? e.vi : e.zh) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !result.isEmpty else {
+            throw WebBackendError(message: language == "vi" ? "Chưa dịch được tin này. Hãy thử lại." : "Chưa dịch được câu này. Hãy thử nói lại.")
+        }
+        return result
     }
 
     // MARK: Gọi máy chủ
