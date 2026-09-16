@@ -551,10 +551,15 @@ struct SocialProfileView: View {
     @State private var errorMessage: String?
     @StateObject private var postsFeed: FeedModel
 
-    init(user: SocialUser, model: FriendsModel? = nil) {
+    /// Có khi là tường của chính mình ở mục Hồ sơ: hiện nút "Đăng xuất" (giống web).
+    var onSignOut: (() -> Void)?
+    @State private var confirmSignOut = false
+
+    init(user: SocialUser, model: FriendsModel? = nil, onSignOut: (() -> Void)? = nil) {
         _user = State(initialValue: user)
         _postsFeed = StateObject(wrappedValue: FeedModel(source: .user(user.id)))
         self.model = model
+        self.onSignOut = onSignOut
     }
 
     private let card = RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -570,6 +575,25 @@ struct SocialProfileView: View {
                     }
                     .disabled(busy)
                     .padding(.horizontal, 40)
+                }
+                if onSignOut != nil {
+                    Button {
+                        confirmSignOut = true
+                    } label: {
+                        Label("Đăng xuất", systemImage: "rectangle.portrait.and.arrow.right")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(socialRed)
+                            .padding(.horizontal, 22)
+                            .padding(.vertical, 10)
+                            .background(Capsule().strokeBorder(socialRed, lineWidth: 1.5))
+                    }
+                    .buttonStyle(.plain)
+                    .confirmationDialog("Đăng xuất khỏi tài khoản?", isPresented: $confirmSignOut, titleVisibility: .visible) {
+                        Button("Đăng xuất", role: .destructive) { onSignOut?() }
+                        Button("Huỷ", role: .cancel) {}
+                    } message: {
+                        Text("Bạn sẽ cần đăng nhập lại để dùng Bạn bè, Phòng chat và đồng bộ với website.")
+                    }
                 }
                 statsGrid
                 WallMedalsCard(medals: user.medals, awards: user.awards)

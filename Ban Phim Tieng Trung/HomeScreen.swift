@@ -17,7 +17,7 @@ extension AppTab {
         case .keyboard: "Bàn phím"
         case .about: "Giới thiệu"
         case .interpreter: "Phiên dịch"
-        case .account: "Tài khoản"
+        case .account: "Hồ sơ"
         case .friends: "Bạn bè"
         case .rooms: "Phòng chat"
         }

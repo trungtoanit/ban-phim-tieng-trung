@@ -8,7 +8,54 @@ import SwiftUI
 
 private let accentRed = Color(red: 0.86, green: 0.17, blue: 0.16)
 
+/// Mục "Hồ sơ" (giống web): đã đăng nhập website thì là tường của chính mình (có nút Đăng xuất);
+/// chưa đăng nhập thì là thẻ đăng nhập. Cài đặt cũ (iCloud, tài khoản Apple…) nằm sau nút ⚙️.
 struct AccountTabView: View {
+    @ObservedObject private var web = WebAccountStore.shared
+    @State private var showSettings = false
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if web.isSignedIn, let me = web.user {
+                    SocialProfileView(user: SocialUser(id: me.id, name: me.name, username: me.username, avatar: me.avatar),
+                                      onSignOut: { WebAccountStore.shared.signOut() })
+                        .id(me.id)
+                } else {
+                    SocialSignInCard(
+                        icon: "person.crop.circle.fill",
+                        title: "Đăng nhập",
+                        message: "Đăng nhập tài khoản website để xem tường của bạn, huân chương, bài đăng và học cùng bạn bè."
+                    )
+                    .navigationTitle("Hồ sơ")
+                }
+            }
+            .homeBackButton()
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showSettings = true
+                    } label: {
+                        Image(systemName: "gearshape")
+                    }
+                    .accessibilityLabel("Cài đặt")
+                }
+            }
+            .navigationDestination(for: SocialUser.self) { user in
+                SocialProfileView(user: user)
+            }
+            .roomDestinations()
+            .sheet(isPresented: $showSettings) {
+                AccountSettingsView()
+            }
+        }
+        .tint(socialRed)
+    }
+}
+
+/// Cài đặt tài khoản trên máy: đăng nhập Apple, đồng bộ iCloud, tài khoản website.
+struct AccountSettingsView: View {
+    @Environment(\.dismiss) private var dismiss
     @ObservedObject private var store = AccountStore.shared
     @ObservedObject private var sync = CloudSync.shared
     @State private var syncOn = CloudSync.shared.isEnabled
@@ -32,8 +79,13 @@ struct AccountTabView: View {
                     WebAccountSection()
                 }
             }
-            .navigationTitle("Tài khoản")
-            .homeBackButton()
+            .navigationTitle("Cài đặt")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Xong") { dismiss() }
+                }
+            }
             .confirmationDialog("Đăng xuất khỏi tài khoản?", isPresented: $confirmSignOut, titleVisibility: .visible) {
                 Button("Đăng xuất", role: .destructive) { store.signOut() }
             }
