@@ -719,7 +719,7 @@ struct SocialProfileView: View {
         }
     }
 
-    /// Kỹ năng: thống kê, huân chương, tiến bộ, lịch 5 tuần, thành tích.
+    /// Kỹ năng: thống kê, huân chương tuần, tiến bộ.
     @ViewBuilder
     private var skillsTabContent: some View {
         VStack(spacing: 18) {
@@ -731,21 +731,21 @@ struct SocialProfileView: View {
             WallProgressSection(userID: user.id, isMe: user.isMe, name: user.name, progress: $progressCache) { word in
                 selectedWord = SelectedWord(word: word)
             }
-            if !user.calendar.isEmpty { calendarCard }
-            if !user.badges.isEmpty { badgesCard }
         }
     }
 
-    /// Học tập: tình huống gần đây, phòng chat đã tạo.
+    /// Học tập: lịch luyện tập 5 tuần, thành tích, tình huống gần đây, phòng chat đã tạo.
     @ViewBuilder
     private var studyTabContent: some View {
         VStack(spacing: 18) {
             if !loaded {
                 ProgressView().padding(.top, 8)
             }
+            if !user.calendar.isEmpty { calendarCard }
+            if !user.badges.isEmpty { badgesCard }
             if !user.recentTopics.isEmpty { topicsCard }
             if !user.rooms.isEmpty { roomsCard }
-            if loaded, user.recentTopics.isEmpty, user.rooms.isEmpty {
+            if loaded, user.calendar.isEmpty, user.badges.isEmpty, user.recentTopics.isEmpty, user.rooms.isEmpty {
                 VStack(spacing: 6) {
                     Text("📚").font(.largeTitle)
                     Text(user.isMe ? "Bạn chưa luyện tình huống nào hay tạo phòng chat." : "\(user.name) chưa luyện tình huống nào hay tạo phòng chat.")
@@ -885,7 +885,7 @@ struct SocialProfileView: View {
             + Array(repeating: nil, count: (7 - user.calendar.count % 7) % 7)
         let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
         return VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("Hoạt động 5 tuần")
+            sectionTitle("Lịch luyện tập")
             VStack(spacing: 6) {
                 LazyVGrid(columns: columns, spacing: 6) {
                     ForEach(Self.weekdays, id: \.self) { day in
