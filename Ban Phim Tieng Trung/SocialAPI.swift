@@ -48,16 +48,19 @@ struct WallBadge: Codable, Hashable, Identifiable {
 
 /// Tình huống hội thoại gần đây trên tường.
 struct WallTopic: Codable, Hashable {
+    /// Id hội thoại trên website (để mở lại bài từ tường của mình).
+    var id: Int?
     let title: String
     let emoji: String
     var userTurns: Int = 0
     var target: Int = 50
     var updatedAt: String?
 
-    enum CodingKeys: String, CodingKey { case title, emoji, userTurns, target, updatedAt }
+    enum CodingKeys: String, CodingKey { case id, title, emoji, userTurns, target, updatedAt }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try? c.decodeIfPresent(Int.self, forKey: .id)
         title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         emoji = try c.decodeIfPresent(String.self, forKey: .emoji) ?? "💬"
         userTurns = try c.decodeIfPresent(Int.self, forKey: .userTurns) ?? 0

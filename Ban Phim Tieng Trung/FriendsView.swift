@@ -558,6 +558,11 @@ struct SocialProfileView: View {
     @State private var tab: WallTab = WallTab.last
     /// Dữ liệu tiến bộ đã tải: đổi tab chỉ chạy lại hoạt ảnh, không tải lại.
     @State private var progressCache: LearningProgress?
+    /// Mở lại tình huống từ "Tình huống gần đây" (tường của mình).
+    @State private var openingTopicID: Int?
+    @State private var openScenario: Scenario?
+    @State private var showConversation = false
+    @State private var topicMissing = false
 
     init(user: SocialUser, model: FriendsModel? = nil, onSignOut: (() -> Void)? = nil) {
         _user = State(initialValue: user)
@@ -620,6 +625,14 @@ struct SocialProfileView: View {
         }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .wordPopup($selectedWord)
+        .navigationDestination(isPresented: $showConversation) {
+            if let openScenario {
+                ConversationView(scenario: openScenario)
+            }
+        }
+        .alert("Tình huống này không còn nữa", isPresented: $topicMissing) {
+            Button("OK", role: .cancel) {}
+        }
         .navigationTitle(user.isMe ? "Tường của tôi" : user.name)
         .navigationBarTitleDisplayMode(.inline)
         .refreshable {
@@ -1020,30 +1033,78 @@ struct SocialProfileView: View {
             VStack(spacing: 0) {
                 ForEach(Array(user.recentTopics.enumerated()), id: \.offset) { index, topic in
                     if index > 0 { Divider().padding(.leading, 52) }
-                    HStack(spacing: 12) {
-                        Text(topic.emoji)
-                            .font(.title3)
-                            .frame(width: 40, height: 40)
-                            .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(socialRed.opacity(0.1)))
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(topic.title)
-                                .font(.subheadline.weight(.semibold))
-                                .lineLimit(1)
-                            HStack(spacing: 8) {
-                                ProgressView(value: Double(min(topic.userTurns, topic.target)), total: Double(topic.target))
-                                    .tint(topic.userTurns >= topic.target ? onlineGreen : socialRed)
-                                Text("\(min(topic.userTurns, topic.target))/\(topic.target)")
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundStyle(.secondary)
-                            }
+                    // Tường của mình: chạm để mở lại bài hội thoại đó.
+                    if user.isMe, let id = topic.id {
+                        Button {
+                            Task { await openTopic(id) }
+                        } label: {
+                            topicRow(topic, tappable: true, loading: openingTopicID == id)
                         }
+                        .buttonStyle(TopicRowStyle())
+                        .disabled(openingTopicID != nil)
+                        .accessibilityHint("Mở lại tình huống này")
+                    } else {
+                        topicRow(topic, tappable: false, loading: false)
                     }
-                    .padding(.vertical, 10)
-                    .accessibilityElement(children: .combine)
                 }
             }
             .padding(.horizontal, 12)
             .background(card.fill(Color(.secondarySystemGroupedBackground)))
+        }
+    }
+
+    private func topicRow(_ topic: WallTopic, tappable: Bool, loading: Bool) -> some View {
+        HStack(spacing: 12) {
+            Text(topic.emoji)
+                .font(.title3)
+                .frame(width: 40, height: 40)
+                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(socialRed.opacity(0.1)))
+            VStack(alignment: .leading, spacing: 5) {
+                Text(topic.title)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                HStack(spacing: 8) {
+                    ProgressView(value: Double(min(topic.userTurns, topic.target)), total: Double(topic.target))
+                        .tint(topic.userTurns >= topic.target ? onlineGreen : socialRed)
+                    Text("\(min(topic.userTurns, topic.target))/\(topic.target)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if tappable {
+                Group {
+                    if loading {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .frame(width: 18)
+            }
+        }
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Tìm hội thoại trên website theo id rồi mở màn hội thoại AI.
+    private func openTopic(_ id: Int) async {
+        openingTopicID = id
+        defer { openingTopicID = nil }
+        do {
+            let conversations = try await WebConversationAPI.state().conversations
+            if let conversation = conversations.first(where: { $0.id == id }) {
+                openScenario = conversation.scenario
+                showConversation = true
+            } else {
+                topicMissing = true
+            }
+        } catch is CancellationError {
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
@@ -1165,5 +1226,19 @@ struct SocialSignInCard: View {
             .frame(maxWidth: .infinity)
         }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
+    }
+}
+
+/// Dòng bấm được trong thẻ: sáng nền nhẹ khi nhấn.
+private struct TopicRowStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Color(.tertiarySystemFill).opacity(configuration.isPressed ? 1 : 0))
+                    .padding(.horizontal, -8)
+            )
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
