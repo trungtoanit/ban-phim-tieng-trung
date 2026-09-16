@@ -21,6 +21,7 @@ struct AccountTabView: View {
                 if let account = store.account {
                     profileSection(account)
                     syncSection
+                    WebAccountSection()
                     Section {
                         Button("Đăng xuất", role: .destructive) { confirmSignOut = true }
                     } footer: {
@@ -28,6 +29,7 @@ struct AccountTabView: View {
                     }
                 } else {
                     signInSection
+                    WebAccountSection()
                 }
             }
             .navigationTitle("Tài khoản")

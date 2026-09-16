@@ -10,6 +10,12 @@ private let brandRed = Color(red: 0.86, green: 0.17, blue: 0.16)
 
 struct ConversationTopicsView: View {
     @StateObject private var store = ScenarioStore()
+    @ObservedObject private var web = WebAccountStore.shared
+    /// Tình huống lưu trên website (khi đã đăng nhập Google), mới nói gần nhất ở đầu.
+    @State private var webConversations: [WebConversationAPI.Conversation] = []
+    @State private var webLoading = false
+    @State private var webError: String?
+    @State private var creatingOnWeb = false
     @AppStorage("conversationRealtime") private var realtime = false
     @AppStorage(StreakStore.goalKey, store: SharedSettings.store)
     private var dailyGoal = StreakStore.defaultGoal
@@ -28,10 +34,77 @@ struct ConversationTopicsView: View {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
         // Bấm Go trên bàn phím khi ô còn trống thì thôi, đừng mở một tình huống không tên.
         guard !trimmed.isEmpty else { return }
+        if web.isSignedIn { return createOnWeb(trimmed) }
         store.addCustom(trimmed)
         customTopic = ""
         topicFocused = false
         customScenario = .custom(trimmed)
+    }
+
+    /// Đã đăng nhập website: tạo tình huống trên máy chủ (AI mở lời luôn) rồi vào nói.
+    private func createOnWeb(_ title: String) {
+        guard !creatingOnWeb else { return }
+        creatingOnWeb = true
+        webError = nil
+        let level = UserDefaults.standard.string(forKey: OpenAISettings.levelKey) ?? ConversationLevel.beginner.rawValue
+        Task {
+            do {
+                let result = try await WebConversationAPI.create(title: title, level: level)
+                await MainActor.run {
+                    creatingOnWeb = false
+                    customTopic = ""
+                    topicFocused = false
+                    webConversations.removeAll { $0.id == result.conversation.id }
+                    webConversations.insert(result.conversation, at: 0)
+                    customScenario = result.conversation.scenario
+                }
+            } catch {
+                await MainActor.run {
+                    creatingOnWeb = false
+                    webError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func refreshWeb() {
+        guard web.isSignedIn else {
+            webConversations = []
+            return
+        }
+        webLoading = true
+        Task {
+            do {
+                let state = try await WebConversationAPI.state()
+                await MainActor.run {
+                    webConversations = state.conversations
+                    webLoading = false
+                    webError = nil
+                }
+            } catch {
+                await MainActor.run {
+                    webLoading = false
+                    webError = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func deleteOnWeb(at offsets: IndexSet) {
+        let removed = offsets.map { webConversations[$0] }
+        webConversations.remove(atOffsets: offsets)
+        Task {
+            for conversation in removed {
+                do {
+                    try await WebConversationAPI.delete(conversationID: conversation.id)
+                } catch {
+                    await MainActor.run {
+                        webError = error.localizedDescription
+                        refreshWeb()
+                    }
+                }
+            }
+        }
     }
 
     var body: some View {
@@ -43,13 +116,21 @@ struct ConversationTopicsView: View {
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 12, trailing: 16))
 
-                if !hasKey {
+                if !web.isSignedIn {
                     Section {
-                        Button {
-                            showSettings = true
-                        } label: {
-                            Label("Kết nối OpenAI để bắt đầu (nhập khoá API)", systemImage: "key.fill")
+                        GoogleSignInButton()
+                        if let error = web.errorMessage {
+                            Text(error).font(.caption).foregroundStyle(.red)
                         }
+                        if !hasKey {
+                            Button {
+                                showSettings = true
+                            } label: {
+                                Label("Hoặc dùng khoá OpenAI của bạn", systemImage: "key.fill")
+                            }
+                        }
+                    } footer: {
+                        Text("Đăng nhập Google cùng Gmail với trang học trên website để dùng chung tình huống, lời thoại và AI của máy chủ — không cần khoá OpenAI.")
                     }
                 }
 
@@ -58,6 +139,10 @@ struct ConversationTopicsView: View {
                 }
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
+
+                if web.isSignedIn {
+                    webSection
+                }
 
                 if !store.customTitles.isEmpty {
                     Section {
@@ -79,7 +164,7 @@ struct ConversationTopicsView: View {
                         }
                         .onDelete(perform: store.removeCustom)
                     } header: {
-                        Label("Tình huống của bạn", systemImage: "list.bullet")
+                        Label(web.isSignedIn ? "Chỉ trên máy này" : "Tình huống của bạn", systemImage: "list.bullet")
                     } footer: {
                         Text("Được lưu trên máy. Nói đủ \(ScenarioStore.targetSentences) câu thì tình huống tự xoá khi thoát ra. Vuốt sang trái để xoá ngay.")
                     }
@@ -87,6 +172,7 @@ struct ConversationTopicsView: View {
             }
             .onAppear {
                 isVisible = true
+                refreshWeb()
                 store.refreshStats()
                 store.isListVisible = true
                 store.describeMissingCustom()
@@ -111,6 +197,8 @@ struct ConversationTopicsView: View {
                 // Vừa đạt mục tiêu: huỷ lời nhắc của hôm nay.
                 if streak.doneToday != wasDone { StreakReminder.reschedule() }
             }
+            .onChange(of: web.user) { _ in refreshWeb() }
+            .refreshable { refreshWeb() }
             .onChange(of: dailyGoal) { _ in
                 streak = StreakStore.summary()
                 StreakReminder.reschedule()
@@ -140,7 +228,8 @@ struct ConversationTopicsView: View {
                 set: { if !$0 { customScenario = nil } }
             )) {
                 if let customScenario {
-                    if realtime {
+                    // Nói trực tiếp chạy bằng khoá OpenAI trên máy, chưa lưu lên website.
+                    if realtime, customScenario.id < 0 {
                         RealtimeConversationView(scenario: customScenario)
                     } else {
                         ConversationView(scenario: customScenario)
@@ -192,18 +281,24 @@ struct ConversationTopicsView: View {
             Button {
                 startCustom(customTopic)
             } label: {
-                Label("Bắt đầu nói", systemImage: "mic.fill")
+                Label(creatingOnWeb ? "Đang tạo tình huống…" : "Bắt đầu nói", systemImage: "mic.fill")
                     .font(.headline)
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 13)
                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(brandRed.opacity(isEmpty ? 0.4 : 1)))
+                        .fill(brandRed.opacity(isEmpty || creatingOnWeb ? 0.4 : 1)))
             }
             .buttonStyle(.plain)
-            .disabled(isEmpty)
+            .disabled(isEmpty || creatingOnWeb)
 
-            if store.customTitles.isEmpty {
+            if let webError {
+                Text(webError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            if store.customTitles.isEmpty, !web.isSignedIn {
                 Text("Mỗi tình huống cần nói đủ \(ScenarioStore.targetSentences) câu; đủ rồi thì thoát ra là tình huống tự xoá.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -213,6 +308,55 @@ struct ConversationTopicsView: View {
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
             .fill(Color(.secondarySystemGroupedBackground)))
         .animation(.easeInOut(duration: 0.15), value: topicFocused)
+    }
+
+    /// Tình huống lưu trên website, dùng chung với trang học trên web.
+    private var webSection: some View {
+        Section {
+            if webConversations.isEmpty {
+                Text(webLoading ? "Đang tải tình huống từ website…" : "Chưa có tình huống nào. Gõ chủ đề ở trên để bắt đầu.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(webConversations) { conversation in
+                Button {
+                    customScenario = conversation.scenario
+                } label: {
+                    HStack(spacing: 13) {
+                        ZStack {
+                            Circle()
+                                .fill(Color(.secondarySystemFill))
+                                .frame(width: 44, height: 44)
+                            Text(conversation.emoji)
+                                .font(.system(size: 24))
+                        }
+                        .frame(width: 52, height: 52)
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(conversation.title)
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            Text(conversation.caption)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                            chip("text.bubble.fill", "\(min(conversation.userTurns, conversation.target))/\(conversation.target) câu",
+                                 tint: conversation.userTurns >= conversation.target ? .green : .secondary)
+                        }
+                        Spacer(minLength: 4)
+                        Image(systemName: "chevron.right")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.vertical, 6)
+                }
+            }
+            .onDelete(perform: deleteOnWeb)
+        } header: {
+            Label("Tình huống trên website", systemImage: "globe")
+        } footer: {
+            Text("Dùng chung với trang học tiengtrung.tuantu.com.vn (\(web.user?.email ?? "")). Kéo xuống để tải lại, vuốt sang trái để xoá.")
+        }
     }
 
     private var completedTitle: String {
@@ -828,7 +972,7 @@ struct ConversationView: View {
                     Button("Thử lại") { session.retry() }
                         .buttonStyle(.bordered)
                 }
-                if !OpenAISettings.hasAPIKey || error.contains("Khoá") || error.contains("model") {
+                if !session.isRemote, !OpenAISettings.hasAPIKey || error.contains("Khoá") || error.contains("model") {
                     Button("Cài đặt OpenAI") { showSettings = true }
                         .buttonStyle(.bordered)
                 }

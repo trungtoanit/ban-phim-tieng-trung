@@ -634,6 +634,8 @@ final class AIConversationSession: ObservableObject {
         var hints: [ChatLine] = []
         /// Người học nói bằng tiếng Việt vì chưa biết diễn đạt — `corrected` là câu tiếng Trung được chỉ.
         var askedInVietnamese = false
+        /// Mã tin nhắn trên máy chủ (hội thoại dùng chung với website); nil là chưa lưu lên máy chủ.
+        var serverID: Int? = nil
 
         /// Những từ máy nghe không chắc — thường là chỗ phát âm chưa tới.
         var flaggedWords: [PinyinWord] { line.words.filter { $0.flagged == true } }
@@ -731,9 +733,17 @@ final class AIConversationSession: ObservableObject {
 
     var hasStarted: Bool { !messages.isEmpty || isThinking }
 
+    /// Tình huống lấy từ website (id dương) và đang đăng nhập: AI do máy chủ trả lời.
+    private var remoteID: Int? {
+        scenario.id > 0 && WebAccountStore.shared.isSignedIn ? scenario.id : nil
+    }
+
+    var isRemote: Bool { remoteID != nil }
+
     /// Vào màn hình: có đoạn dở thì dựng lại ngay cho thấy, không thì mở lời luôn.
     func prepare() {
         guard !hasStarted, !needsResumeChoice else { return }
+        if let remoteID { return prepareRemote(remoteID) }
         guard let saved = ConversationArchive.saved(for: scenario), !saved.messages.isEmpty else {
             return start()
         }
@@ -785,6 +795,7 @@ final class AIConversationSession: ObservableObject {
         savedTurns = 0
         elapsed = 0
         clockStart = Date()
+        if let remoteID { return requestRemoteReply(remoteID, restart: true) }
         ConversationArchive.remove(for: scenario)
         requestReply()
     }
@@ -802,6 +813,8 @@ final class AIConversationSession: ObservableObject {
     private func persist() {
         guard !messages.isEmpty else { return }
         accumulateTime()
+        // Hội thoại của website đã lưu trên máy chủ theo từng lượt.
+        guard !isRemote else { return }
         let turns = history.map { ConversationArchive.Saved.Turn(role: $0.role.rawValue, content: $0.content) }
         ConversationArchive.save(
             .init(messages: messages, history: turns, updatedAt: Date(),
@@ -905,6 +918,7 @@ final class AIConversationSession: ObservableObject {
         isThinking = true
         canRetry = false
         errorMessage = nil
+        if let remoteID { return coachRemote(remoteID, text: text, messageID: messageID, token: token) }
 
         let instructions = basePrompt() + """
         The learner does not know how to say something in Chinese yet. They said it in Vietnamese: "\(text)".
@@ -1103,6 +1117,7 @@ final class AIConversationSession: ObservableObject {
     }
 
     private func requestReply() {
+        if let remoteID { return requestRemoteReply(remoteID, restart: false) }
         let token = UUID()
         requestToken = token
         isThinking = true
@@ -1346,6 +1361,182 @@ final class AIConversationSession: ObservableObject {
     }
 }
 
+
+// MARK: - Hội thoại dùng chung với website (AI do máy chủ trả lời)
+
+extension AIConversationSession {
+    /// Dựng tin nhắn của app từ tin nhắn máy chủ trả về (api/conversation.php).
+    private static func message(from server: WebConversationAPI.Message) -> Message {
+        var message = Message(speaker: server.isUser ? .user : .partner, line: server.chatLine)
+        message.serverID = server.id
+        message.askedInVietnamese = server.askedInVietnamese
+        if server.askedInVietnamese {
+            message.line = ChatLine(zh: server.zh, vi: "", words: [PinyinWord(zh: server.zh, py: "")])
+        }
+        let feedback = server.feedback?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        message.feedback = feedback.isEmpty ? nil : feedback
+        message.corrected = server.corrected.map(\.chatLine).flatMap { $0.zh.isEmpty ? nil : $0 }
+        message.hints = (server.hints ?? []).map(\.chatLine).filter { !$0.zh.isEmpty }
+        return message
+    }
+
+    /// Vào màn hình: tải lời thoại từ máy chủ. Tình huống vừa tạo (mới có câu mở đầu) thì nói luôn.
+    fileprivate func prepareRemote(_ conversationID: Int) {
+        isThinking = true
+        errorMessage = nil
+        Task {
+            do {
+                let result = try await WebConversationAPI.messages(conversationID: conversationID)
+                await MainActor.run {
+                    self.isThinking = false
+                    let loaded = result.messages.map(Self.message(from:))
+                    guard !loaded.isEmpty else {
+                        self.clockStart = Date()
+                        return self.requestRemoteReply(conversationID, restart: false)
+                    }
+                    self.messages = loaded
+                    self.savedTurns = loaded.filter { $0.speaker == .user }.count
+                    self.isFinished = false
+                    self.needsResumeChoice = true
+                    // Bước 2 lần trước hỏng (thiếu pinyin / gợi ý) thì bổ sung.
+                    if let last = result.messages.last, !last.isUser, !last.hasWords || (last.hints ?? []).isEmpty {
+                        self.requestRemoteDetail(conversationID, messageID: last.id)
+                    }
+                    if self.savedTurns == 0 { self.resume() }
+                }
+            } catch {
+                await MainActor.run {
+                    self.isThinking = false
+                    self.canRetry = false
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// Bước 1 trên máy chủ: gửi câu người học vừa nói (hoặc xin AI nói tiếp / nói lại từ đầu).
+    fileprivate func requestRemoteReply(_ conversationID: Int, restart: Bool) {
+        let token = UUID()
+        requestToken = token
+        isThinking = true
+        canRetry = false
+        errorMessage = nil
+        // Câu người học vừa nói mà máy chủ chưa lưu. Lần gửi trước hỏng thì "Thử lại" gửi lại đúng câu đó.
+        let pending = restart ? nil : messages.last.flatMap {
+            $0.speaker == .user && $0.serverID == nil && !$0.askedInVietnamese ? $0 : nil
+        }
+
+        Task {
+            do {
+                let result: [WebConversationAPI.Message]
+                if restart {
+                    result = try await WebConversationAPI.restart(conversationID: conversationID)
+                } else if let pending {
+                    result = try await WebConversationAPI.send(conversationID: conversationID, text: pending.line.zh)
+                } else {
+                    result = try await WebConversationAPI.reply(conversationID: conversationID)
+                }
+                await MainActor.run {
+                    guard self.requestToken == token else { return }
+                    self.isThinking = false
+                    if let pending, let learner = result.first(where: \.isUser),
+                       let index = self.messages.firstIndex(where: { $0.id == pending.id }) {
+                        self.messages[index].serverID = learner.id
+                    }
+                    guard let partner = result.last(where: { !$0.isUser }) else {
+                        self.canRetry = true
+                        self.errorMessage = "AI chưa trả lời được câu này. Hãy thử lại."
+                        return
+                    }
+                    let reply = Self.message(from: partner)
+                    self.messages.append(reply)
+                    self.persist()
+                    NaturalSpeaker.chinese.speak(reply.line.zh, preferOpenAI: true) { [weak self] in
+                        self?.listenAfterReply()
+                    }
+                    self.requestRemoteDetail(conversationID, messageID: partner.id)
+                }
+            } catch {
+                await MainActor.run {
+                    guard self.requestToken == token else { return }
+                    self.isThinking = false
+                    self.canRetry = !((error as? WebBackendError)?.needsLogin ?? false)
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// Bước 2 trên máy chủ: pinyin, nghĩa, góp ý, câu sửa, gợi ý. Hỏng thì thử lại một lần.
+    fileprivate func requestRemoteDetail(_ conversationID: Int, messageID: Int, attempt: Int = 1) {
+        Task {
+            do {
+                let result = try await WebConversationAPI.detail(conversationID: conversationID, messageID: messageID)
+                await MainActor.run { self.applyRemoteDetail(result) }
+            } catch {
+                guard attempt < 2, !((error as? WebBackendError)?.needsLogin ?? false) else { return }
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                self.requestRemoteDetail(conversationID, messageID: messageID, attempt: attempt + 1)
+            }
+        }
+    }
+
+    private func applyRemoteDetail(_ result: [WebConversationAPI.Message]) {
+        for server in result {
+            guard let index = messages.firstIndex(where: { $0.serverID == server.id }) else { continue }
+            let updated = Self.message(from: server)
+            if server.isUser {
+                guard !server.askedInVietnamese else { continue }
+                // Giữ đúng chữ người học đã nói; chỉ nhận cách tách từ của AI khi khớp câu.
+                if server.hasWords, updated.line.zh.filter(\.isLetter) == messages[index].line.zh.filter(\.isLetter) {
+                    messages[index].line = updated.line
+                    if !messages[index].retried,
+                       let flagged = PronunciationScore.flag(words: messages[index].line.words,
+                                                             segments: messages[index].heard) {
+                        messages[index].line.words = flagged
+                        Self.recordUnclear(messages[index])
+                    }
+                } else if messages[index].line.vi.isEmpty {
+                    messages[index].line.vi = updated.line.vi
+                }
+                messages[index].feedback = updated.feedback
+                messages[index].corrected = updated.corrected
+            } else {
+                if server.hasWords { messages[index].line.words = updated.line.words }
+                if !updated.line.vi.isEmpty { messages[index].line.vi = updated.line.vi }
+                messages[index].hints = updated.hints
+            }
+            fillMissingVietnamese(messages[index].id)
+        }
+        persist()
+    }
+
+    /// "Chưa biết nói": máy chủ chỉ câu tiếng Trung nên nói rồi lưu vào lời thoại chung.
+    fileprivate func coachRemote(_ conversationID: Int, text: String, messageID: UUID, token: UUID) {
+        Task {
+            do {
+                let result = try await WebConversationAPI.coach(conversationID: conversationID, text: text)
+                await MainActor.run {
+                    guard self.requestToken == token else { return }
+                    self.isThinking = false
+                    guard let server = result.first, let suggestion = server.corrected?.chatLine, !suggestion.zh.isEmpty,
+                          let index = self.messages.firstIndex(where: { $0.id == messageID }) else { return }
+                    self.messages[index].serverID = server.id
+                    self.messages[index].corrected = suggestion
+                    self.persist()
+                    self.speak(suggestion, thenListen: self.handsFree)
+                }
+            } catch {
+                await MainActor.run {
+                    guard self.requestToken == token else { return }
+                    self.isThinking = false
+                    self.canRetry = false
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+}
 
 // MARK: - Nói trực tiếp (OpenAI Realtime)
 
