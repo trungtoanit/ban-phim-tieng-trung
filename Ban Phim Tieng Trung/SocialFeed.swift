@@ -292,8 +292,8 @@ final class FeedModel: ObservableObject {
     @Published var loaded = false
     @Published var loadingMore = false
     @Published var errorMessage: String?
-    /// Bảng tin: false = Đang theo dõi, true = Khám phá.
-    @Published var explore = false
+    /// Bảng tin: true = mọi người (mặc định, giống web), false = chỉ người đang theo dõi.
+    @Published var explore = true
 
     let source: Source
 

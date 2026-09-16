@@ -221,13 +221,13 @@ private struct FriendsHomeView: View {
                     feed.insert(post)
                 }
                 Picker("", selection: $feed.explore) {
+                    Text("Mọi người").tag(true)
                     Text("Đang theo dõi").tag(false)
-                    Text("Khám phá").tag(true)
                 }
                 .pickerStyle(.segmented)
                 FeedPostsList(feed: feed, emptyText: feed.explore
                               ? "Chưa ai đăng bài. Hãy là người đầu tiên!"
-                              : "Chưa có bài nào từ bạn và những người bạn theo dõi. Xem Khám phá hoặc đăng bài đầu tiên nhé!")
+                              : "Chưa có bài nào từ bạn và những người bạn theo dõi. Xem Mọi người hoặc đăng bài đầu tiên nhé!")
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
