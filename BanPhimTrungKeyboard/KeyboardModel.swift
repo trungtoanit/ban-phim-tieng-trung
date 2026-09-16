@@ -503,7 +503,7 @@ final class KeyboardModel: ObservableObject {
     func showWord(_ word: PinyinWord) {
         let text = RubyText.splitPunctuation(word.zh).core
         guard !text.isEmpty else { return }
-        NaturalSpeaker.chinese.speak(text)
+        // Không tự đọc khi chạm từ: chỉ phát khi bấm nút loa.
         // Từ nào trong câu vừa chèn cũng xoá hoặc sửa được, không riêng từ bị đánh dấu đỏ.
         var index: Int?
         if panel == nil, case let .result(words, chinese, _) = display, chinese == lastInserted,

@@ -137,7 +137,7 @@ private struct WordPopupCard: View {
         }
         .task {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.55)) { appeared = true }
-            NaturalSpeaker.chinese.speak(text)
+            // Không tự đọc: chỉ phát khi người học bấm nút loa.
             // Từ đã xem chi tiết thì lấy luôn nghĩa đã lưu, khỏi tra mạng.
             if let saved = WordInsightCache.get(text) {
                 meaning = saved.meaning
