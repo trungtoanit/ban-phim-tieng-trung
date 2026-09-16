@@ -554,6 +554,7 @@ struct SocialProfileView: View {
     /// Có khi là tường của chính mình ở mục Hồ sơ: hiện nút "Đăng xuất" (giống web).
     var onSignOut: (() -> Void)?
     @State private var confirmSignOut = false
+    @State private var selectedWord: SelectedWord?
 
     init(user: SocialUser, model: FriendsModel? = nil, onSignOut: (() -> Void)? = nil) {
         _user = State(initialValue: user)
@@ -597,6 +598,9 @@ struct SocialProfileView: View {
                 }
                 statsGrid
                 WallMedalsCard(medals: user.medals, awards: user.awards)
+                WallProgressSection(userID: user.id, isMe: user.isMe, name: user.name) { word in
+                    selectedWord = SelectedWord(word: word)
+                }
                 if !user.calendar.isEmpty { calendarCard }
                 if !user.badges.isEmpty { badgesCard }
                 if !user.recentTopics.isEmpty { topicsCard }
@@ -618,6 +622,7 @@ struct SocialProfileView: View {
             .frame(maxWidth: .infinity)
         }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .wordPopup($selectedWord)
         .navigationTitle(user.isMe ? "Tường của tôi" : user.name)
         .navigationBarTitleDisplayMode(.inline)
         .refreshable {
