@@ -91,6 +91,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		C0DE00000000000000000001 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Debug.xcconfig; sourceTree = "<group>"; };
 		04DC04A73057BAF900AE3DF2 /* Ban Phim Tieng Trung.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Ban Phim Tieng Trung.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		04DC04AA3057BAF900AE3DF2 /* Ban_Phim_Tieng_TrungApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ban_Phim_Tieng_TrungApp.swift; sourceTree = "<group>"; };
 		04DC04AC3057BAF900AE3DF2 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -164,6 +165,7 @@
 		04DC049E3057BAF800AE3DF2 = {
 			isa = PBXGroup;
 			children = (
+				C0DE00000000000000000001 /* Debug.xcconfig */,
 				04DC04A93057BAF900AE3DF2 /* Ban Phim Tieng Trung */,
 				B10000000000000000000030 /* Shared */,
 				B10000000000000000000031 /* BanPhimTrungKeyboard */,
@@ -555,6 +557,7 @@
 		};
 		04DC04B63057BAFA00AE3DF2 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C0DE00000000000000000001 /* Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-Sad AppIcon-Angry AppIcon-Crying";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;

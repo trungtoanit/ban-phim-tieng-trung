@@ -22,6 +22,18 @@ enum WebBackend {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return value.hasSuffix(".apps.googleusercontent.com") ? value : nil
     }
+
+    /// Chỉ bản Debug: khoá đăng nhập giả lập (DEV_LOGIN_SECRET trong Config/DevLogin.local.xcconfig,
+    /// phải trùng .env của website). Bản Release luôn trả nil.
+    static var devLoginSecret: String? {
+        #if DEBUG
+        let value = (Bundle.main.object(forInfoDictionaryKey: "DevLoginSecret") as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.count >= 32 && !value.hasPrefix("$(") ? value : nil
+        #else
+        return nil
+        #endif
+    }
 }
 
 struct WebBackendError: LocalizedError {
@@ -68,7 +80,12 @@ final class WebAccountStore: NSObject, ObservableObject {
     func signInWithGoogle() {
         guard !isSigningIn else { return }
         guard let clientID = WebBackend.googleClientID else {
-            errorMessage = "App chưa được cấu hình đăng nhập Google (thiếu GoogleIOSClientID trong Info.plist)."
+            // Chưa có client ID Google: bản Debug đăng nhập giả lập tài khoản dev (ID = 1).
+            if let secret = WebBackend.devLoginSecret {
+                signInDev(secret: secret)
+            } else {
+                errorMessage = "App chưa được cấu hình đăng nhập Google (thiếu GoogleIOSClientID trong Info.plist)."
+            }
             return
         }
         isSigningIn = true
@@ -84,6 +101,22 @@ final class WebAccountStore: NSObject, ObservableObject {
                     // Bấm huỷ trong trang Google thì không phải lỗi.
                     if (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin { return }
                     self.errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    private func signInDev(secret: String) {
+        isSigningIn = true
+        errorMessage = nil
+        Task {
+            do {
+                let (token, user) = try await Self.authRequest(["action": "dev", "secret": secret])
+                await MainActor.run { self.save(token: token, user: user) }
+            } catch {
+                await MainActor.run {
+                    self.isSigningIn = false
+                    self.errorMessage = "Đăng nhập giả lập: \(error.localizedDescription)"
                 }
             }
         }
@@ -194,6 +227,10 @@ final class WebAccountStore: NSObject, ObservableObject {
     }
 
     private static func exchange(idToken: String) async throws -> (String, WebUser) {
+        try await authRequest(["action": "google", "idToken": idToken])
+    }
+
+    private static func authRequest(_ payload: [String: String]) async throws -> (String, WebUser) {
         struct Response: Decodable {
             let ok: Bool
             let token: String?
@@ -203,10 +240,9 @@ final class WebAccountStore: NSObject, ObservableObject {
         var request = URLRequest(url: WebBackend.baseURL.appendingPathComponent("api/auth.php"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let device = await MainActor.run { UIDevice.current.model }
-        request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "action": "google", "idToken": idToken, "device": device,
-        ])
+        var body = payload
+        body["device"] = await MainActor.run { UIDevice.current.model }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, _) = try await URLSession.shared.data(for: request)
         guard let response = try? JSONDecoder().decode(Response.self, from: data) else {
             throw WebBackendError(message: "Máy chủ trả về dữ liệu lỗi. Hãy thử lại sau.")

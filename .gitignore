@@ -9,3 +9,6 @@ build/
 
 # macOS
 .DS_Store
+
+# Khoá đăng nhập giả lập (chỉ trên máy dev)
+*.local.xcconfig
