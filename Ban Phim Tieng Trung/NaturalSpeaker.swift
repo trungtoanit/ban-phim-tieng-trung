@@ -143,13 +143,14 @@ final class NaturalSpeaker: NSObject, ObservableObject {
     /// `completion` chỉ chạy khi đọc xong trọn vẹn, không chạy nếu bị `stop()`.
     /// `preferOpenAI`: dùng giọng OpenAI nếu đã có khoá (màn hình hội thoại AI).
     /// `progress` nhận số ký tự đã đọc xong, để màn hình tô đậm dần theo lời đọc.
-    func speak(_ text: String, preferOpenAI: Bool = false,
+    func speak(_ text: String, preferOpenAI: Bool = false, rate: Float? = nil,
                progress: ((Int) -> Void)? = nil, completion: (() -> Void)? = nil) {
         for other in Self.all where other !== self {
             other.stop()
         }
         stop()
         generation += 1
+        oneShotRate = rate
         self.completion = completion
         progressHandler = progress
         spokenCount = text.count
@@ -229,10 +230,13 @@ final class NaturalSpeaker: NSObject, ObservableObject {
         }.resume()
     }
 
+    /// Tốc độ riêng cho lần đọc này (nút 🐢 Chậm = 0.7), nil là tốc độ thường.
+    private var oneShotRate: Float?
+
     private func speakWithOpenAI(_ text: String, generation: Int) {
         let cacheKey = "openai|\(text)"
         if let data = audioCache[cacheKey] {
-            play(data, fallbackText: text, rate: 1)
+            play(data, fallbackText: text, rate: oneShotRate ?? 1)
             return
         }
         guard let synthesize = Self.openAISpeech else {
@@ -246,7 +250,7 @@ final class NaturalSpeaker: NSObject, ObservableObject {
                 guard let self, generation == self.generation else { return }
                 if let data, !data.isEmpty {
                     self.audioCache[cacheKey] = data
-                    self.play(data, fallbackText: text, rate: 1)
+                    self.play(data, fallbackText: text, rate: self.oneShotRate ?? 1)
                 } else {
                     // Lỗi mạng / khoá: dùng giọng Google thay thế.
                     self.speakWithGoogle(text, generation: generation)

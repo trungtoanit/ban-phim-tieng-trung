@@ -24,9 +24,13 @@ struct Ban_Phim_Tieng_TrungApp: App {
         StreakStore.raiseGoalIfNeeded()
         // Đã đăng nhập thì mở đồng bộ iCloud ngay từ đầu, để mở app là thấy tiến độ máy khác.
         if AccountStore.shared.isSignedIn { CloudSync.shared.start() }
-        NaturalSpeaker.hasOpenAIVoice = { OpenAISettings.hasAPIKey }
+        // Đã đăng nhập website: dùng giọng đọc của máy chủ giống trang web (không cần khoá riêng).
+        NaturalSpeaker.hasOpenAIVoice = { WebAccountStore.shared.isSignedIn || OpenAISettings.hasAPIKey }
         NaturalSpeaker.openAISpeech = { text, languageCode in
-            try await OpenAIClient.speech(text: text, languageCode: languageCode)
+            if WebAccountStore.shared.isSignedIn {
+                return try await WebSpeechAPI.speech(text: text, languageCode: languageCode)
+            }
+            return try await OpenAIClient.speech(text: text, languageCode: languageCode)
         }
     }
 

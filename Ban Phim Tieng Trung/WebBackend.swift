@@ -353,6 +353,9 @@ enum WebConversationAPI {
     }
 
     struct Conversation: Codable, Identifiable, Hashable {
+        static func == (a: Conversation, b: Conversation) -> Bool { a.id == b.id && a.userTurns == b.userTurns && a.title == b.title }
+        func hash(into hasher: inout Hasher) { hasher.combine(id) }
+
         let id: Int
         let title: String
         let emoji: String
@@ -381,16 +384,57 @@ enum WebConversationAPI {
         let feedback: String?
         let corrected: Line?
         let hints: [Line]?
+        /// Chấm phát âm của câu người học (giống badge 🎯 / ⚡ trên web).
+        let speech: Speech?
 
         var isUser: Bool { speaker == "user" }
         var hasWords: Bool { !(words ?? []).isEmpty }
         var chatLine: ChatLine { WebConversationAPI.chatLine(zh: zh, vi: vi, words: words) }
     }
 
-    struct Stats: Codable {
+    /// Kết quả chấm câu nói: % đúng (sau bước 2), tốc độ chữ/phút (chỉ khi nói bằng micro).
+    struct Speech: Codable, Hashable {
+        let input: String?
+        let cpm: Int?
+        let accuracy: Double?
+        let wrongChars: Int?
+    }
+
+    /// Cách người học nhập câu, gửi kèm `send` để máy chủ phân tích phát âm / tốc độ nói.
+    struct SpeechMeta: Codable, Hashable {
+        /// "voice" hoặc "typed".
+        var input: String
+        /// "mic" hoặc "handsfree" (chỉ khi nói).
+        var mode: String?
+        var durationMs: Int?
+        var confidence: Double?
+
+        var payload: [String: Any] {
+            var body: [String: Any] = ["input": input]
+            if let mode { body["mode"] = mode }
+            if let durationMs { body["durationMs"] = durationMs }
+            if let confidence { body["confidence"] = confidence }
+            return body
+        }
+    }
+
+    struct WeekDay: Codable, Hashable {
+        let label: String
+        let done: Bool
+        let today: Bool
+        let future: Bool
+    }
+
+    struct Stats: Codable, Equatable {
         let streak: Int
         let todaySentences: Int
+        let todayClean: Int?
         let totalSentences: Int
+        let week: [WeekDay]?
+
+        /// Mục tiêu mỗi ngày, giống cột phải trên web (hoc.php).
+        static let sentenceGoal = 20
+        static let cleanGoal = 10
     }
 
     private struct Envelope: Decodable {
@@ -401,7 +445,13 @@ enum WebConversationAPI {
         let conversations: [Conversation]?
         let messages: [Message]?
         let stats: Stats?
+        let vi: String?
     }
+
+    /// Máy chủ vừa trả về tình huống (sau mỗi câu gửi): màn hình cập nhật tiến độ x/50.
+    static let conversationUpdated = Notification.Name("WebConversationUpdated")
+    /// Số câu hôm nay đổi: màn danh sách tải lại thống kê.
+    static let statsChanged = Notification.Name("WebConversationStatsChanged")
 
     /// Pinyin AI tách sẵn nếu khớp đúng câu, không thì tự chuyển trên máy như bước 1 của app.
     static func chatLine(zh: String, vi: String, words: [Word]?) -> ChatLine {
@@ -436,8 +486,17 @@ enum WebConversationAPI {
         return (conversation, envelope.messages ?? [])
     }
 
-    static func send(conversationID: Int, text: String) async throws -> [Message] {
-        try await call("send", ["id": conversationID, "text": text]).messages ?? []
+    static func send(conversationID: Int, text: String, speech: SpeechMeta? = nil) async throws -> [Message] {
+        var payload: [String: Any] = ["id": conversationID, "text": text]
+        if let speech { payload["speech"] = speech.payload }
+        let messages = try await call("send", payload).messages ?? []
+        await MainActor.run { NotificationCenter.default.post(name: statsChanged, object: nil) }
+        return messages
+    }
+
+    /// Nghĩa tiếng Việt của câu tiếng Trung đang gõ (xem trước dưới ô nhập, giống web).
+    static func translate(text: String) async throws -> String {
+        try await call("translate", ["text": text]).vi ?? ""
     }
 
     static func reply(conversationID: Int) async throws -> [Message] {
@@ -501,7 +560,35 @@ enum WebConversationAPI {
         guard envelope.ok else {
             throw WebBackendError(message: envelope.error ?? "Có lỗi xảy ra. Hãy thử lại.")
         }
+        if let conversation = envelope.conversation {
+            await MainActor.run { NotificationCenter.default.post(name: conversationUpdated, object: conversation) }
+        }
         return envelope
+    }
+}
+
+// MARK: - Giọng đọc của máy chủ (api/speech.php, giống nút Nghe trên web)
+
+enum WebSpeechAPI {
+    static func speech(text: String, languageCode: String) async throws -> Data {
+        guard let token = WebAccountStore.shared.token else {
+            throw WebBackendError(message: "Chưa đăng nhập website.", needsLogin: true)
+        }
+        var request = URLRequest(url: WebBackend.baseURL.appendingPathComponent("api/speech.php"))
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(token, forHTTPHeaderField: "X-Api-Token")
+        let lang = languageCode.lowercased().hasPrefix("vi") ? "vi" : "zh"
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["text": String(text.prefix(300)), "lang": lang])
+        let (data, response) = try await URLSession.shared.data(for: request)
+        let type = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type") ?? ""
+        guard (response as? HTTPURLResponse)?.statusCode == 200, type.contains("audio") else {
+            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
+            throw WebBackendError(message: message ?? "Không tạo được giọng đọc.")
+        }
+        return data
     }
 }
 

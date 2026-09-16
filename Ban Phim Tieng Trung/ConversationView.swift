@@ -16,6 +16,13 @@ struct ConversationTopicsView: View {
     @State private var webLoading = false
     @State private var webError: String?
     @State private var creatingOnWeb = false
+    /// Thống kê của tài khoản website (chuỗi, câu hôm nay, mục tiêu) — giống cột phải trên web.
+    @State private var webStats: WebConversationAPI.Stats?
+    /// Màn "Đang chuẩn bị tình huống…" trong lúc AI tạo tình huống (5–20 giây).
+    @State private var preparingTitle: String?
+    @State private var preparingDone = false
+    @State private var pendingDelete: WebConversationAPI.Conversation?
+    @AppStorage(OpenAISettings.levelKey) private var webLevel = ConversationLevel.beginner.rawValue
     @AppStorage("conversationRealtime") private var realtime = false
     @AppStorage(StreakStore.goalKey, store: SharedSettings.store)
     private var dailyGoal = StreakStore.defaultGoal
@@ -46,11 +53,18 @@ struct ConversationTopicsView: View {
         guard !creatingOnWeb else { return }
         creatingOnWeb = true
         webError = nil
-        let level = UserDefaults.standard.string(forKey: OpenAISettings.levelKey) ?? ConversationLevel.beginner.rawValue
+        topicFocused = false
+        preparingDone = false
+        withAnimation(.easeOut(duration: 0.25)) { preparingTitle = title }
+        let level = webLevel
         Task {
             do {
                 let result = try await WebConversationAPI.create(title: title, level: level)
+                // Cho thanh tiến độ chạy nốt tới 100% rồi mới vào nói.
+                await MainActor.run { preparingDone = true }
+                try? await Task.sleep(nanoseconds: 400_000_000)
                 await MainActor.run {
+                    withAnimation(.easeIn(duration: 0.2)) { preparingTitle = nil }
                     creatingOnWeb = false
                     customTopic = ""
                     topicFocused = false
@@ -60,6 +74,7 @@ struct ConversationTopicsView: View {
                 }
             } catch {
                 await MainActor.run {
+                    withAnimation { preparingTitle = nil }
                     creatingOnWeb = false
                     webError = error.localizedDescription
                 }
@@ -78,6 +93,7 @@ struct ConversationTopicsView: View {
                 let state = try await WebConversationAPI.state()
                 await MainActor.run {
                     webConversations = state.conversations
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { webStats = state.stats }
                     webLoading = false
                     webError = nil
                 }
@@ -91,8 +107,13 @@ struct ConversationTopicsView: View {
     }
 
     private func deleteOnWeb(at offsets: IndexSet) {
-        let removed = offsets.map { webConversations[$0] }
-        webConversations.remove(atOffsets: offsets)
+        // Giống web: hỏi lại trước khi xoá.
+        pendingDelete = offsets.first.map { webConversations[$0] }
+    }
+
+    private func confirmDelete(_ conversation: WebConversationAPI.Conversation) {
+        let removed = [conversation]
+        webConversations.removeAll { $0.id == conversation.id }
         Task {
             for conversation in removed {
                 do {
@@ -111,7 +132,11 @@ struct ConversationTopicsView: View {
         NavigationStack {
             List {
                 Section {
-                    streakCard
+                    if web.isSignedIn, let webStats {
+                        WebStatsCard(stats: webStats)
+                    } else {
+                        streakCard
+                    }
                 }
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 12, trailing: 16))
@@ -199,6 +224,24 @@ struct ConversationTopicsView: View {
                 if streak.doneToday != wasDone { StreakReminder.reschedule() }
             }
             .onChange(of: web.user) { _ in refreshWeb() }
+            .onReceive(NotificationCenter.default.publisher(for: WebConversationAPI.statsChanged)) { _ in refreshWeb() }
+            .overlay {
+                if let preparingTitle {
+                    PreparingTopicView(title: preparingTitle, done: preparingDone)
+                        .transition(.opacity)
+                }
+            }
+            .confirmationDialog(pendingDelete.map { "Xoá tình huống “\($0.title)”?" } ?? "",
+                                isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+                                titleVisibility: .visible) {
+                Button("Xoá tình huống", role: .destructive) {
+                    if let pendingDelete { confirmDelete(pendingDelete) }
+                    pendingDelete = nil
+                }
+                Button("Huỷ", role: .cancel) { pendingDelete = nil }
+            } message: {
+                Text("Đoạn hội thoại sẽ bị ẩn. Số câu bạn đã nói và điểm phát âm vẫn được giữ.")
+            }
             .refreshable { refreshWeb() }
             .onChange(of: dailyGoal) { _ in
                 streak = StreakStore.summary()
@@ -279,6 +322,19 @@ struct ConversationTopicsView: View {
             .contentShape(Rectangle())
             .onTapGesture { topicFocused = true }
 
+            if web.isSignedIn {
+                Picker("Trình độ", selection: $webLevel) {
+                    ForEach(ConversationLevel.allCases) { item in
+                        Text(item.label).tag(item.rawValue)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 6)
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.systemGroupedBackground)))
+            }
+
             Button {
                 startCustom(customTopic)
             } label: {
@@ -299,6 +355,27 @@ struct ConversationTopicsView: View {
                     .foregroundStyle(.red)
             }
 
+            if web.isSignedIn {
+                // Gợi ý chủ đề giống web: chạm để điền vào ô.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(Self.topicIdeas, id: \.self) { idea in
+                            Button {
+                                customTopic = idea
+                            } label: {
+                                Text(idea)
+                                    .font(.footnote.weight(.medium))
+                                    .foregroundStyle(.primary)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 7)
+                                    .background(Capsule().strokeBorder(Color(.separator), lineWidth: 1.5))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+
             if store.customTitles.isEmpty, !web.isSignedIn {
                 Text("Mỗi tình huống cần nói đủ \(ScenarioStore.targetSentences) câu; đủ rồi thì thoát ra là tình huống tự xoá.")
                     .font(.caption)
@@ -310,6 +387,9 @@ struct ConversationTopicsView: View {
             .fill(Color(.secondarySystemGroupedBackground)))
         .animation(.easeInOut(duration: 0.15), value: topicFocused)
     }
+
+    static let topicIdeas = ["Gọi món ở nhà hàng lẩu", "Mặc cả khi mua quần áo", "Hỏi đường đến ga tàu",
+                             "Làm quen với đồng nghiệp mới", "Đặt phòng khách sạn"]
 
     /// Tình huống lưu trên website, dùng chung với trang học trên web.
     private var webSection: some View {
@@ -342,7 +422,7 @@ struct ConversationTopicsView: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                             chip("text.bubble.fill", "\(min(conversation.userTurns, conversation.target))/\(conversation.target) câu",
-                                 tint: conversation.userTurns >= conversation.target ? .green : .secondary)
+                                 tint: conversation.userTurns >= conversation.target ? brandRed : .secondary)
                         }
                         Spacer(minLength: 4)
                         Image(systemName: "chevron.right")
@@ -356,7 +436,7 @@ struct ConversationTopicsView: View {
         } header: {
             Label("Tình huống trên website", systemImage: "globe")
         } footer: {
-            Text("Dùng chung với trang học tiengtrung.tuantu.com.vn (\(web.user?.email ?? "")). Kéo xuống để tải lại, vuốt sang trái để xoá.")
+            Text("Dùng chung với trang học tiengtrung.tuantu.com.vn (\(web.user.map { $0.email.isEmpty ? "@\($0.username ?? "")" : $0.email } ?? "")). Kéo xuống để tải lại, vuốt sang trái để xoá.")
         }
     }
 
@@ -543,6 +623,12 @@ struct ConversationView: View {
     @State private var showSettings = false
     /// Chế độ rảnh tay toàn màn hình kiểu ChatGPT Voice.
     @State private var voiceMode = false
+    /// Tình huống trên website: tiến độ x/50 câu (máy chủ gửi về sau mỗi câu).
+    @State private var remoteConversation: WebConversationAPI.Conversation?
+    /// Nghĩa tiếng Việt xem trước của câu đang gõ (giống ô xem trước trên web).
+    @State private var previewVi = ""
+    @State private var previewTask: Task<Void, Never>?
+    @State private var previewCache: [String: String] = [:]
 
     init(scenario: Scenario) {
         _session = StateObject(wrappedValue: AIConversationSession(scenario: scenario))
@@ -553,6 +639,9 @@ struct ConversationView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 14) {
+                        if session.isRemote, let unit = remoteConversation {
+                            unitCard(unit)
+                        }
                         header
                         ForEach(session.messages) { message in
                             bubble(message)
@@ -634,6 +723,12 @@ struct ConversationView: View {
         .onAppear {
             session.prepare()
         }
+        .onReceive(NotificationCenter.default.publisher(for: WebConversationAPI.conversationUpdated)) { note in
+            guard let conversation = note.object as? WebConversationAPI.Conversation,
+                  conversation.id == session.scenario.id else { return }
+            withAnimation(.easeOut(duration: 0.3)) { remoteConversation = conversation }
+        }
+        .onChange(of: draft) { updatePreview($0) }
         .onDisappear {
             session.stop()
         }
@@ -772,6 +867,69 @@ struct ConversationView: View {
 
     // MARK: - Tin nhắn
 
+    /// Thẻ tình huống đỏ giống web: "☕ TÌNH HUỐNG · 15/50 CÂU", tên, chú thích, thanh tiến độ.
+    private func unitCard(_ unit: WebConversationAPI.Conversation) -> some View {
+        let done = min(unit.userTurns, unit.target)
+        return VStack(alignment: .leading, spacing: 4) {
+            Text("\(unit.emoji) Tình huống · \(done)/\(unit.target) câu\(unit.userTurns >= unit.target ? " · Hoàn thành 🎉" : "")".uppercased())
+                .font(.caption2.weight(.bold))
+                .kerning(0.6)
+                .opacity(0.9)
+                .contentTransition(.numericText())
+            Text(unit.title)
+                .font(.headline.weight(.heavy))
+            Text(unit.caption.isEmpty ? "Bạn là \(unit.userRole.lowercased()) · nói chuyện với \(unit.partnerRole.lowercased())" : unit.caption)
+                .font(.caption)
+                .opacity(0.92)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.white.opacity(0.3))
+                    Capsule().fill(.white)
+                        .frame(width: geo.size.width * min(1, CGFloat(unit.userTurns) / CGFloat(max(unit.target, 1))))
+                }
+            }
+            .frame(height: 8)
+            .padding(.top, 4)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(brandRed)
+                .shadow(color: Color(red: 0.72, green: 0.14, blue: 0.11), radius: 0, y: 4)
+        )
+        .padding(.bottom, 4)
+    }
+
+    /// Badge chấm câu nói giống web: 🎯 % đọc đúng, ⚡ chữ/phút.
+    @ViewBuilder
+    private func speechBadge(_ speech: WebConversationAPI.Speech?) -> some View {
+        if let speech, speech.accuracy != nil || (speech.cpm ?? 0) > 0 {
+            HStack(spacing: 6) {
+                if let accuracy = speech.accuracy {
+                    let tint: Color = accuracy >= 90 ? .primary : accuracy >= 70 ? Color(red: 0.69, green: 0.48, blue: 0) : brandRed
+                    badgeChip("🎯 \(Int(accuracy.rounded()))%", tint: tint)
+                        .accessibilityLabel(speech.wrongChars.map { $0 > 0 ? "\($0) chữ nghe ra khác câu chuẩn" : "Phát âm khớp câu chuẩn" } ?? "Độ chính xác")
+                }
+                if let cpm = speech.cpm, cpm > 0 {
+                    badgeChip("⚡ \(cpm) chữ/phút", tint: .secondary)
+                }
+            }
+        }
+    }
+
+    private func badgeChip(_ text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.bold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(Color(.systemBackground).opacity(0.7)))
+            .overlay(Capsule().strokeBorder(Color(.separator)))
+    }
+
     private var header: some View {
         VStack(spacing: 4) {
             Text(session.scenario.partnerEmoji)
@@ -805,6 +963,7 @@ struct ConversationView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer(minLength: 8)
+                        slowButton(message.line)
                         speakButton(message.line, thenListen: session.messages.last?.id == message.id)
                     }
                     // Chỉ gợi ý cho câu mới nhất; gợi ý của lượt cũ không còn hợp cảnh.
@@ -830,6 +989,7 @@ struct ConversationView: View {
                     } else {
                         Text(message.line.zh)
                     }
+                    speechBadge(message.speech)
                     if let feedback = message.feedback {
                         Label(feedback, systemImage: "lightbulb.fill")
                             .font(.caption)
@@ -842,7 +1002,7 @@ struct ConversationView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(message.askedInVietnamese ? "Câu này nói thế này:" : "Nói tự nhiên hơn:")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.green)
+                                .foregroundStyle(brandRed)
                             HStack(alignment: .top) {
                                 ruby(corrected, size: 16)
                                 Spacer(minLength: 4)
@@ -855,7 +1015,7 @@ struct ConversationView: View {
                             }
                         }
                         .padding(8)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(Color.green.opacity(0.08)))
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Color(.systemBackground).opacity(0.7)))
                     }
                 }
                 .padding(12)
@@ -921,6 +1081,17 @@ struct ConversationView: View {
                         HStack(alignment: .top) {
                             ruby(hint, size: 15)
                             Spacer(minLength: 4)
+                            Button {
+                                // Giống web: chạm gợi ý thì đọc lên và điền vào ô để sửa rồi gửi.
+                                draft = hint.zh
+                                session.isTextMode = true
+                                session.speak(hint)
+                            } label: {
+                                Image(systemName: "square.and.pencil")
+                                    .foregroundStyle(brandRed)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("Dùng câu gợi ý này")
                             speakButton(hint)
                         }
                         if !hint.vi.isEmpty {
@@ -989,6 +1160,17 @@ struct ConversationView: View {
         RubyText(words: line.words, hanziSize: size, showHanViet: showHanViet) {
             selectedWord = SelectedWord(word: $0)
         }
+    }
+
+    /// 🐢 Đọc chậm (0.7×) như nút "Chậm" trên web.
+    private func slowButton(_ line: ChatLine) -> some View {
+        Button {
+            session.speak(line, slow: true)
+        } label: {
+            Text("🐢").font(.system(size: 15))
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Đọc chậm")
     }
 
     private func speakButton(_ line: ChatLine, thenListen: Bool = false) -> some View {
@@ -1106,7 +1288,50 @@ struct ConversationView: View {
         .accessibilityLabel(session.isListeningForReply ? "Nói xong" : "Bấm để nói")
     }
 
+    /// Xem trước câu đang gõ: pinyin từng từ + nghĩa tiếng Việt (máy chủ dịch, đợi 450ms).
+    @ViewBuilder
+    private var draftPreview: some View {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        if ChineseText.containsHan(text) {
+            VStack(alignment: .leading, spacing: 4) {
+                RubyText(words: ChineseText.words(for: text), hanziSize: 17, showHanViet: showHanViet)
+                if !previewVi.isEmpty {
+                    Text(previewVi)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+            .transition(.opacity)
+        }
+    }
+
+    private func updatePreview(_ value: String) {
+        previewTask?.cancel()
+        let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard session.isRemote, ChineseText.containsHan(text) else {
+            previewVi = ""
+            return
+        }
+        if let cached = previewCache[text] {
+            previewVi = cached
+            return
+        }
+        previewTask = Task {
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            guard !Task.isCancelled, let vi = try? await WebConversationAPI.translate(text: text) else { return }
+            await MainActor.run {
+                previewCache[text] = vi
+                if draft.trimmingCharacters(in: .whitespacesAndNewlines) == text { previewVi = vi }
+            }
+        }
+    }
+
     private var textRow: some View {
+        VStack(spacing: 8) {
+        draftPreview
         HStack(spacing: 8) {
             Button {
                 session.isTextMode = false
@@ -1132,6 +1357,7 @@ struct ConversationView: View {
             }
             .disabled(session.isThinking || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             .accessibilityLabel("Gửi")
+        }
         }
     }
 
@@ -1941,5 +2167,203 @@ struct SparkBurst: View {
             withAnimation(.easeOut(duration: 1.1)) { go = true }
         }
         .allowsHitTesting(false)
+    }
+}
+
+
+// MARK: - Giống cột phải trên web: chuỗi ngày + mục tiêu hôm nay
+
+struct WebStatsCard: View {
+    let stats: WebConversationAPI.Stats
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                FlameView(size: 26, isLit: stats.streak > 0)
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text("\(stats.streak)")
+                        .font(.system(size: 34, weight: .heavy, design: .rounded))
+                        .contentTransition(.numericText())
+                    Text("ngày liên tiếp")
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text("\(stats.totalSentences)")
+                        .font(.headline.weight(.heavy))
+                        .contentTransition(.numericText())
+                    Text("tổng câu").font(.caption2).foregroundStyle(.secondary)
+                }
+            }
+
+            if let week = stats.week, week.count == 7 {
+                HStack(spacing: 0) {
+                    ForEach(Array(week.enumerated()), id: \.offset) { _, day in
+                        VStack(spacing: 6) {
+                            Text(day.label)
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(day.today ? brandRed : .secondary)
+                            ZStack {
+                                Circle()
+                                    .fill(day.done ? Color.orange : Color(.tertiarySystemFill))
+                                    .frame(width: 30, height: 30)
+                                if day.done {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 13, weight: .heavy))
+                                        .foregroundStyle(.white)
+                                }
+                                if day.today {
+                                    Circle().strokeBorder(brandRed, lineWidth: 2).frame(width: 34, height: 34)
+                                }
+                            }
+                            .opacity(day.future ? 0.5 : 1)
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+
+            Divider()
+            Text("Mục tiêu hôm nay")
+                .font(.subheadline.weight(.bold))
+            goal("🗣️", "Nói \(WebConversationAPI.Stats.sentenceGoal) câu",
+                 value: stats.todaySentences, target: WebConversationAPI.Stats.sentenceGoal)
+            goal("🎯", "\(WebConversationAPI.Stats.cleanGoal) câu nói chuẩn, không cần sửa",
+                 value: stats.todayClean ?? 0, target: WebConversationAPI.Stats.cleanGoal)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color(.secondarySystemGroupedBackground)))
+    }
+
+    private func goal(_ emoji: String, _ title: String, value: Int, target: Int) -> some View {
+        HStack(spacing: 12) {
+            Text(emoji).font(.system(size: 26))
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title).font(.footnote.weight(.semibold))
+                GeometryReader { geo in
+                    ZStack {
+                        Capsule().fill(Color(.tertiarySystemFill))
+                        HStack(spacing: 0) {
+                            Capsule()
+                                .fill(Color(red: 1, green: 0.78, blue: 0))
+                                .frame(width: geo.size.width * min(1, CGFloat(value) / CGFloat(max(target, 1))))
+                            Spacer(minLength: 0)
+                        }
+                        Text("\(min(value, target)) / \(target)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(height: 14)
+            }
+        }
+    }
+}
+
+// MARK: - Màn chờ AI tạo tình huống (giống #preparing trên web)
+
+struct PreparingTopicView: View {
+    let title: String
+    let done: Bool
+
+    private static let steps = ["Đọc chủ đề bạn muốn nói", "Chọn vai cho AI và cho bạn",
+                                "AI nghĩ câu mở đầu bằng tiếng Trung", "Chuẩn bị pinyin và nghĩa tiếng Việt"]
+    /// Bước chuyển theo thời gian đã chờ (giây), giống web.
+    private static let stepTimes: [TimeInterval] = [0, 1.2, 3, 9]
+    private static let tips = [
+        "💡 Mẹo: nói thành câu ngắn, rõ từng chữ — máy nghe chuẩn hơn.",
+        "💡 Chưa biết nói? Bấm VI rồi nói tiếng Việt, AI chỉ cách nói.",
+        "💡 Bật ∞ Rảnh tay để nói liên tục, không cần bấm micro mỗi câu.",
+        "💡 Chạm vào từng chữ để xem nghĩa và nghe riêng từ đó.",
+        "💡 Bí quá thì bấm “Bí quá, gợi ý đi” để xem câu nói tiếp.",
+    ]
+
+    @State private var start = Date()
+    @State private var ringPulse = false
+
+    var body: some View {
+        ZStack {
+            Color(.systemGroupedBackground).opacity(0.97).ignoresSafeArea()
+            TimelineView(.periodic(from: .now, by: 0.2)) { context in
+                let elapsed = context.date.timeIntervalSince(start)
+                let progress = done ? 1 : 0.92 * (1 - exp(-elapsed / 6))
+                let current = done ? Self.steps.count : Self.stepTimes.lastIndex(where: { elapsed >= $0 }) ?? 0
+                VStack(spacing: 18) {
+                    ZStack {
+                        ForEach(0..<2) { i in
+                            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                .stroke(brandRed, lineWidth: 3)
+                                .frame(width: 104, height: 104)
+                                .scaleEffect(ringPulse ? 1.35 : 0.9)
+                                .opacity(ringPulse ? 0 : 0.7)
+                                .animation(.easeOut(duration: 1.8).repeatForever(autoreverses: false).delay(Double(i) * 0.9), value: ringPulse)
+                        }
+                        MascotView(mood: .happy, size: 92)
+                    }
+                    .frame(height: 130)
+
+                    VStack(spacing: 6) {
+                        Text("Đang chuẩn bị tình huống…")
+                            .font(.title3.weight(.heavy))
+                        Text("“\(title)”")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(Array(Self.steps.enumerated()), id: \.offset) { index, step in
+                            HStack(spacing: 10) {
+                                ZStack {
+                                    if index < current {
+                                        Circle().fill(brandRed).frame(width: 20, height: 20)
+                                        Image(systemName: "checkmark").font(.system(size: 10, weight: .heavy)).foregroundStyle(.white)
+                                    } else if index == current {
+                                        ProgressView().controlSize(.mini).tint(brandRed)
+                                    } else {
+                                        Circle().strokeBorder(Color(.separator), lineWidth: 2).frame(width: 20, height: 20)
+                                    }
+                                }
+                                .frame(width: 22)
+                                Text(step)
+                                    .font(.footnote.weight(index <= current ? .semibold : .regular))
+                                    .foregroundStyle(index < current ? brandRed : index == current ? .primary : .secondary)
+                            }
+                            .animation(.easeOut(duration: 0.25), value: current)
+                        }
+                    }
+                    .frame(maxWidth: 320, alignment: .leading)
+
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color(.tertiarySystemFill))
+                            Capsule()
+                                .fill(LinearGradient(colors: [Color(red: 0.72, green: 0.14, blue: 0.11), brandRed],
+                                                     startPoint: .leading, endPoint: .trailing))
+                                .frame(width: geo.size.width * progress)
+                                .animation(.easeOut(duration: 0.4), value: progress)
+                        }
+                    }
+                    .frame(width: 280, height: 10)
+
+                    Text(Self.tips[Int(elapsed / 5) % Self.tips.count])
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 320)
+                        .id(Int(elapsed / 5))
+                        .transition(.opacity)
+                }
+                .padding(24)
+            }
+        }
+        .onAppear {
+            start = Date()
+            ringPulse = true
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Đang chuẩn bị tình huống \(title)")
     }
 }

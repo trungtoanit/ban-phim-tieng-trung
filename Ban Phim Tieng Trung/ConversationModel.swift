@@ -636,6 +636,10 @@ final class AIConversationSession: ObservableObject {
         var askedInVietnamese = false
         /// Mã tin nhắn trên máy chủ (hội thoại dùng chung với website); nil là chưa lưu lên máy chủ.
         var serverID: Int? = nil
+        /// Cách người học nhập câu (nói/gõ, thời lượng) — gửi lên máy chủ để phân tích phát âm, tốc độ.
+        var speechMeta: WebConversationAPI.SpeechMeta? = nil
+        /// Máy chủ chấm câu này: % đọc đúng, chữ/phút (badge giống web).
+        var speech: WebConversationAPI.Speech? = nil
 
         /// Những từ máy nghe không chắc — thường là chỗ phát âm chưa tới.
         var flaggedWords: [PinyinWord] { line.words.filter { $0.flagged == true } }
@@ -971,10 +975,10 @@ final class AIConversationSession: ObservableObject {
 
     /// `thenListen`: nghe xong thì mở lại micro. Chỉ đúng với câu mới nhất của AI —
     /// nghe lại một gợi ý hay câu sửa thì không được tự mở micro rồi gửi đi lung tung.
-    func speak(_ line: ChatLine, thenListen: Bool = false) {
+    func speak(_ line: ChatLine, thenListen: Bool = false, slow: Bool = false) {
         // Tắt micro trước, nếu không loa và micro tranh nhau audio session.
         capture.cancel()
-        NaturalSpeaker.chinese.speak(line.zh, preferOpenAI: true) { [weak self] in
+        NaturalSpeaker.chinese.speak(line.zh, preferOpenAI: true, rate: slow ? 0.7 : nil) { [weak self] in
             guard thenListen else { return }
             self?.listenAfterReply()
         }
@@ -990,6 +994,16 @@ final class AIConversationSession: ObservableObject {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         var message = Message(speaker: .user, line: line)
         message.heard = heard
+        if source == .spoken {
+            let scored = heard.filter { $0.confidence > 0 }
+            let confidence = scored.isEmpty ? nil : Double(scored.map(\.confidence).reduce(0, +)) / Double(scored.count)
+            let duration = capture.spokenDuration
+            message.speechMeta = .init(input: "voice", mode: handsFree ? "handsfree" : "mic",
+                                       durationMs: duration > 0 ? Int(duration * 1000) : nil,
+                                       confidence: confidence.map { ($0 * 100).rounded() / 100 })
+        } else {
+            message.speechMeta = .init(input: "typed")
+        }
         if let flagged = PronunciationScore.flag(words: line.words, segments: heard) {
             message.line.words = flagged
         }
@@ -1377,6 +1391,7 @@ extension AIConversationSession {
         message.feedback = feedback.isEmpty ? nil : feedback
         message.corrected = server.corrected.map(\.chatLine).flatMap { $0.zh.isEmpty ? nil : $0 }
         message.hints = (server.hints ?? []).map(\.chatLine).filter { !$0.zh.isEmpty }
+        message.speech = server.speech
         return message
     }
 
@@ -1432,7 +1447,8 @@ extension AIConversationSession {
                 if restart {
                     result = try await WebConversationAPI.restart(conversationID: conversationID)
                 } else if let pending {
-                    result = try await WebConversationAPI.send(conversationID: conversationID, text: pending.line.zh)
+                    result = try await WebConversationAPI.send(conversationID: conversationID, text: pending.line.zh,
+                                                              speech: pending.speechMeta)
                 } else {
                     result = try await WebConversationAPI.reply(conversationID: conversationID)
                 }
@@ -1442,6 +1458,7 @@ extension AIConversationSession {
                     if let pending, let learner = result.first(where: \.isUser),
                        let index = self.messages.firstIndex(where: { $0.id == pending.id }) {
                         self.messages[index].serverID = learner.id
+                        self.messages[index].speech = learner.speech
                     }
                     guard let partner = result.last(where: { !$0.isUser }) else {
                         self.canRetry = true
@@ -1501,6 +1518,7 @@ extension AIConversationSession {
                 }
                 messages[index].feedback = updated.feedback
                 messages[index].corrected = updated.corrected
+                if let speech = updated.speech { messages[index].speech = speech }
             } else {
                 if server.hasWords { messages[index].line.words = updated.line.words }
                 if !updated.line.vi.isEmpty { messages[index].line.vi = updated.line.vi }
