@@ -93,6 +93,10 @@ struct ConversationTopicsView: View {
                 let state = try await WebConversationAPI.state()
                 await MainActor.run {
                     webConversations = state.conversations
+                    if !Self.autoOpenedLatest, customScenario == nil, let latest = state.conversations.first {
+                        Self.autoOpenedLatest = true
+                        customScenario = latest.scenario
+                    }
                     withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { webStats = state.stats }
                     webLoading = false
                     webError = nil
@@ -131,13 +135,13 @@ struct ConversationTopicsView: View {
     var body: some View {
         NavigationStack {
             List {
-                // Không hiện chuỗi ngày ở màn này (người dùng yêu cầu); chỉ còn mục tiêu hôm nay khi đã đăng nhập.
-                if web.isSignedIn, let webStats {
+                // Đã đăng nhập: bố cục giống trang học trên web (ô chủ đề → tình huống của bạn → mục tiêu hôm nay).
+                if web.isSignedIn {
                     Section {
-                        WebStatsCard(stats: webStats)
+                        webStartCard
                     }
                     .listRowBackground(Color.clear)
-                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 12, trailing: 16))
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
                 }
 
                 if !web.isSignedIn {
@@ -159,14 +163,23 @@ struct ConversationTopicsView: View {
                     }
                 }
 
-                Section {
-                    newTopicCard
+                if !web.isSignedIn {
+                    Section {
+                        newTopicCard
+                    }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
                 }
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
 
                 if web.isSignedIn {
                     webSection
+                    if let webStats {
+                        Section {
+                            WebStatsCard(stats: webStats)
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 12, trailing: 16))
+                    }
                 }
 
                 // Đã đăng nhập: chỉ dùng tình huống trên website, ẩn danh sách chỉ lưu trên máy.
@@ -388,6 +401,103 @@ struct ConversationTopicsView: View {
         .animation(.easeInOut(duration: 0.15), value: topicFocused)
     }
 
+    /// Giống web: lần đầu vào màn này trong mỗi lần mở app thì vào thẳng tình huống nói gần nhất.
+    private static var autoOpenedLatest = false
+
+    /// Ô chủ đề kiểu trang học trên web: tiêu đề, mô tả, ô nhập, trình độ, nút đỏ "BẮT ĐẦU NÓI", gợi ý chủ đề.
+    private var webStartCard: some View {
+        let isEmpty = customTopic.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Hôm nay muốn nói về chủ đề gì?")
+                .font(.title3.weight(.heavy))
+                .foregroundStyle(.primary)
+            Text("Gõ tình huống bằng tiếng Việt, AI sẽ đóng vai người Trung Quốc nói chuyện với bạn. Mỗi tình huống nói đủ 50 câu là hoàn thành.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            TextField("Phỏng vấn xin việc, đi khám răng…", text: $customTopic)
+                .font(.body)
+                .focused($topicFocused)
+                .submitLabel(.go)
+                .onSubmit { startCustom(customTopic) }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(.secondarySystemBackground)))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(topicFocused ? RubyText.pinyinBlue : Color(.separator), lineWidth: 2))
+
+            Menu {
+                Picker("Trình độ", selection: $webLevel) {
+                    ForEach(ConversationLevel.allCases) { item in
+                        Text(item.label).tag(item.rawValue)
+                    }
+                }
+            } label: {
+                HStack {
+                    Text((ConversationLevel(rawValue: webLevel) ?? .beginner).label)
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Image(systemName: "chevron.down")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(.secondarySystemBackground)))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color(.separator), lineWidth: 2))
+            }
+
+            Button {
+                startCustom(customTopic)
+            } label: {
+                Text(creatingOnWeb ? "ĐANG TẠO TÌNH HUỐNG…" : "BẮT ĐẦU NÓI")
+                    .font(.system(size: 16, weight: .heavy))
+                    .kerning(0.8)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 15)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(brandRed)
+                            .shadow(color: Color(red: 0.72, green: 0.14, blue: 0.11), radius: 0, y: 4)
+                    )
+                    .opacity(isEmpty || creatingOnWeb ? 0.55 : 1)
+            }
+            .buttonStyle(.plain)
+            .disabled(isEmpty || creatingOnWeb)
+            .padding(.bottom, 4)
+
+            if let webError {
+                Text(webError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+
+            FlowLayout(spacing: 8, lineSpacing: 8) {
+                ForEach(Self.topicIdeas, id: \.self) { idea in
+                    Button {
+                        customTopic = idea
+                    } label: {
+                        Text(idea)
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.primary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 9)
+                            .background(
+                                Capsule()
+                                    .fill(Color(.systemBackground))
+                                    .shadow(color: Color(.separator), radius: 0, y: 2)
+                            )
+                            .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 2))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
     static let topicIdeas = ["Gọi món ở nhà hàng lẩu", "Mặc cả khi mua quần áo", "Hỏi đường đến ga tàu",
                              "Làm quen với đồng nghiệp mới", "Đặt phòng khách sạn"]
 
@@ -395,7 +505,7 @@ struct ConversationTopicsView: View {
     private var webSection: some View {
         Section {
             if webConversations.isEmpty {
-                Text(webLoading ? "Đang tải tình huống từ website…" : "Chưa có tình huống nào. Gõ chủ đề ở trên để bắt đầu.")
+                Text(webLoading ? "Đang tải tình huống…" : "Chưa có tình huống nào. Gõ chủ đề ở trên để bắt đầu.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -434,9 +544,9 @@ struct ConversationTopicsView: View {
             }
             .onDelete(perform: deleteOnWeb)
         } header: {
-            Label("Tình huống trên website", systemImage: "globe")
+            Text("Tình huống của bạn")
         } footer: {
-            Text("Dùng chung với trang học tiengtrung.tuantu.com.vn (\(web.user.map { $0.email.isEmpty ? "@\($0.username ?? "")" : $0.email } ?? "")). Kéo xuống để tải lại, vuốt sang trái để xoá.")
+            Text("Dùng chung với trang học trên web. Vuốt sang trái để xoá.")
         }
     }
 
