@@ -18,6 +18,8 @@ extension AppTab {
         case .about: "Giới thiệu"
         case .interpreter: "Phiên dịch"
         case .account: "Tài khoản"
+        case .friends: "Bạn bè"
+        case .rooms: "Phòng chat"
         }
     }
 
@@ -32,6 +34,8 @@ extension AppTab {
         case .about: "person.crop.circle.fill"
         case .interpreter: "translate"
         case .account: "person.crop.circle.badge.checkmark"
+        case .friends: "person.2.fill"
+        case .rooms: "bubble.left.and.text.bubble.right.fill"
         }
     }
 
@@ -47,12 +51,15 @@ extension AppTab {
         case .about: [Color(red: 0.36, green: 0.74, blue: 1), Color(red: 0.12, green: 0.44, blue: 0.94)]
         case .interpreter: [Color(red: 0.3, green: 0.88, blue: 0.84), Color(red: 0.05, green: 0.58, blue: 0.64)]
         case .account: [Color(red: 0.62, green: 0.68, blue: 0.98), Color(red: 0.29, green: 0.31, blue: 0.83)]
+        case .friends: [Color(red: 0.95, green: 0.3, blue: 0.28), Color(red: 0.62, green: 0.08, blue: 0.1)]
+        case .rooms: [Color(red: 0.4, green: 0.4, blue: 0.43), Color(red: 0.12, green: 0.12, blue: 0.14)]
         }
     }
 
     /// Bốn tính năng dùng nhiều nhất nằm ở dock, còn lại trên màn hình.
+    /// Dock chỉ vừa 4 icon: Bạn bè và Phòng chat (đi liền sau Hội thoại như trên web) đứng đầu lưới.
     static let dock: [AppTab] = [.practice, .conversation, .vocabulary, .sounds]
-    static let grid: [AppTab] = [.interpreter, .mistakes, .keyboard, .account, .about]
+    static let grid: [AppTab] = [.friends, .rooms, .interpreter, .mistakes, .keyboard, .account, .about]
 }
 
 // MARK: - Nút về trang chủ

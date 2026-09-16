@@ -17,6 +17,8 @@ enum AppTab: Hashable {
     case about
     case interpreter
     case account
+    case friends
+    case rooms
 }
 
 struct ContentView: View {
@@ -102,6 +104,8 @@ struct ContentView: View {
         case .about: AboutView()
         case .interpreter: InterpreterView()
         case .account: AccountTabView()
+        case .friends: FriendsView()
+        case .rooms: ChatRoomsView()
         }
     }
 
