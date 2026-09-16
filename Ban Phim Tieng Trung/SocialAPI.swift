@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import UIKit
 
 /// Một ngày trên lịch 5 tuần của tường.
 struct WallDay: Codable, Hashable {
@@ -308,6 +309,44 @@ struct RoomMessage: Codable, Identifiable, Hashable {
     let createdAt: String
     let mine: Bool
     let user: User
+    /// Ảnh đính kèm (tin có ảnh thì `text` có thể rỗng).
+    var image: SocialImage?
+
+    enum CodingKeys: String, CodingKey { case id, text, createdAt, mine, user, image }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+        createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt) ?? ""
+        mine = try c.decodeIfPresent(Bool.self, forKey: .mine) ?? false
+        user = try c.decode(User.self, forKey: .user)
+        image = try? c.decodeIfPresent(SocialImage.self, forKey: .image)
+    }
+}
+
+/// Ảnh trên máy chủ (đã thu về JPEG ≤ 1600px) kèm kích thước để giữ đúng tỉ lệ khi đang tải.
+struct SocialImage: Codable, Hashable, Identifiable {
+    let url: String
+    var width: Int = 0
+    var height: Int = 0
+
+    var id: String { url }
+    var imageURL: URL? { URL(string: url) }
+    /// Rộng / cao; thiếu kích thước thì coi như ảnh vuông.
+    var aspectRatio: CGFloat {
+        guard width > 0, height > 0 else { return 1 }
+        return CGFloat(width) / CGFloat(height)
+    }
+
+    enum CodingKeys: String, CodingKey { case url, width, height }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        url = try c.decode(String.self, forKey: .url)
+        width = (try? c.decodeIfPresent(Int.self, forKey: .width)) ?? 0
+        height = (try? c.decodeIfPresent(Int.self, forKey: .height)) ?? 0
+    }
 }
 
 /// Một trang tin nhắn của phòng (mới hơn `after` hoặc cũ hơn `before`).
@@ -349,6 +388,13 @@ enum SocialAPI {
         let online: [RoomMessage.User]?
         // Dịch
         let zh: String?
+        // Bảng tin
+        let posts: [FeedPost]?
+        let post: FeedPost?
+        let comments: [PostComment]?
+        let comment: PostComment?
+        let likeCount: Int?
+        let liked: Bool?
     }
 
     /// Phần chung của mọi phản hồi, đọc trước để báo lỗi / hết phiên.
@@ -451,6 +497,79 @@ enum SocialAPI {
         _ = try await call("message_delete", ["messageId": id])
     }
 
+    /// Gửi ảnh (JPEG đã nén) vào phòng, kèm chữ nếu có.
+    static func sendImage(roomId: Int, text: String, jpeg: Data, progress: ((Double) -> Void)? = nil) async throws -> RoomMessage {
+        let e = try await multipart("room_send", fields: ["id": String(roomId), "text": text],
+                                    files: [UploadFile(field: "image", filename: "photo.jpg", mimeType: "image/jpeg", data: jpeg)],
+                                    progress: progress)
+        guard let message = e.message else { throw missing }
+        return message
+    }
+
+    // MARK: Bảng tin
+
+    struct FeedPage {
+        let posts: [FeedPost]
+        let hasMore: Bool
+    }
+
+    /// Bảng tin: mình + người mình theo dõi; `all` = Khám phá (mọi người).
+    static func feed(all: Bool, before: Int = 0) async throws -> FeedPage {
+        var params: [String: Any] = [:]
+        if all { params["scope"] = "all" }
+        if before > 0 { params["before"] = before }
+        let e = try await call("feed", params, method: "GET")
+        return FeedPage(posts: e.posts ?? [], hasMore: e.hasMore ?? false)
+    }
+
+    /// Bài đăng trên tường của một người.
+    static func posts(userId: Int, before: Int = 0) async throws -> FeedPage {
+        var params: [String: Any] = ["userId": userId]
+        if before > 0 { params["before"] = before }
+        let e = try await call("posts", params, method: "GET")
+        return FeedPage(posts: e.posts ?? [], hasMore: e.hasMore ?? false)
+    }
+
+    static func createPost(text: String, image: Data?, audio: UploadFile?, musicURL: String, roomId: Int?,
+                           progress: ((Double) -> Void)? = nil) async throws -> FeedPost {
+        var fields = ["text": text]
+        if !musicURL.isEmpty { fields["musicUrl"] = musicURL }
+        if let roomId { fields["roomId"] = String(roomId) }
+        var files: [UploadFile] = []
+        if let image { files.append(UploadFile(field: "image", filename: "photo.jpg", mimeType: "image/jpeg", data: image)) }
+        if let audio { files.append(audio) }
+        guard let post = try await multipart("post_create", fields: fields, files: files, progress: progress).post else { throw missing }
+        return post
+    }
+
+    static func deletePost(id: Int) async throws {
+        _ = try await request("post_delete", ["id": id])
+    }
+
+    /// Thích / bỏ thích; trả về số lượt thích mới.
+    static func like(postId: Int, _ like: Bool) async throws -> (count: Int, liked: Bool) {
+        let e = try await call(like ? "post_like" : "post_unlike", ["id": postId])
+        return (e.likeCount ?? 0, e.liked ?? like)
+    }
+
+    static func comments(postId: Int) async throws -> [PostComment] {
+        try await call("comments", ["id": postId], method: "GET").comments ?? []
+    }
+
+    static func comment(postId: Int, text: String) async throws -> PostComment {
+        guard let comment = try await call("comment", ["id": postId, "text": text]).comment else { throw missing }
+        return comment
+    }
+
+    static func deleteComment(id: Int) async throws {
+        _ = try await request("comment_delete", ["commentId": id])
+    }
+
+    /// Phòng đang có người online / mình đã tham gia, để chia sẻ lên bảng tin.
+    static func liveRooms() async throws -> [ChatRoom] {
+        try await call("rooms_live", method: "GET").rooms ?? []
+    }
+
     // MARK: Dịch (nói tiếng Việt trong phòng chat)
 
     /// Dịch câu sang tiếng Trung để người học xác nhận trước khi gửi vào phòng.
@@ -474,11 +593,12 @@ enum SocialAPI {
     }
 
     /// Gửi yêu cầu, kiểm tra ok / hết phiên, trả về dữ liệu thô để từng action tự đọc.
+    private static var endpoint: URL { WebBackend.baseURL.appendingPathComponent("api/social.php") }
+
     private static func request(_ action: String, _ payload: [String: Any] = [:], method: String = "POST") async throws -> Data {
         guard let token = WebAccountStore.shared.token else {
             throw WebBackendError(message: "Hãy đăng nhập để dùng Bạn bè và Phòng chat.", needsLogin: true)
         }
-        let endpoint = WebBackend.baseURL.appendingPathComponent("api/social.php")
         var request: URLRequest
         if method == "GET" {
             var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
@@ -505,6 +625,65 @@ enum SocialAPI {
             if error is CancellationError || (error as? URLError)?.code == .cancelled { throw CancellationError() }
             throw WebBackendError(message: "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.")
         }
+        return try validate(data)
+    }
+
+    /// Một file gửi kèm (ảnh, nhạc).
+    struct UploadFile {
+        let field: String
+        let filename: String
+        let mimeType: String
+        let data: Data
+    }
+
+    /// Gửi multipart/form-data (ảnh phòng chat, bài đăng có ảnh / nhạc), báo tiến độ tải lên 0–1.
+    private static func multipart(_ action: String, fields: [String: String], files: [UploadFile],
+                                  progress: ((Double) -> Void)? = nil) async throws -> Envelope {
+        guard let token = WebAccountStore.shared.token else {
+            throw WebBackendError(message: "Hãy đăng nhập để dùng Bạn bè và Phòng chat.", needsLogin: true)
+        }
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var body = Data()
+        func append(_ string: String) { body.append(Data(string.utf8)) }
+        var allFields = fields
+        allFields["action"] = action
+        for (name, value) in allFields {
+            append("--\(boundary)\r\n")
+            append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")
+            append("\(value)\r\n")
+        }
+        for file in files {
+            let safeName = file.filename.replacingOccurrences(of: "\"", with: "")
+            append("--\(boundary)\r\n")
+            append("Content-Disposition: form-data; name=\"\(file.field)\"; filename=\"\(safeName)\"\r\n")
+            append("Content-Type: \(file.mimeType)\r\n\r\n")
+            body.append(file.data)
+            append("\r\n")
+        }
+        append("--\(boundary)--\r\n")
+
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(token, forHTTPHeaderField: "X-Api-Token")
+        request.timeoutInterval = 120
+
+        let data: Data
+        do {
+            let delegate = UploadProgressDelegate(onProgress: progress)
+            (data, _) = try await URLSession.shared.upload(for: request, from: body, delegate: delegate)
+        } catch {
+            if error is CancellationError || (error as? URLError)?.code == .cancelled { throw CancellationError() }
+            throw WebBackendError(message: "Không tải lên được. Kiểm tra mạng rồi thử lại.")
+        }
+        let checked = try validate(data)
+        guard let envelope = try? JSONDecoder().decode(Envelope.self, from: checked) else { throw missing }
+        return envelope
+    }
+
+    /// Kiểm tra ok / hết phiên của phản hồi.
+    private static func validate(_ data: Data) throws -> Data {
         guard let envelope = try? JSONDecoder().decode(Status.self, from: data) else {
             throw WebBackendError(message: "Máy chủ trả về dữ liệu lỗi. Hãy thử lại sau.")
         }
@@ -516,6 +695,116 @@ enum SocialAPI {
             throw WebBackendError(message: envelope.error ?? "Có lỗi xảy ra. Hãy thử lại.")
         }
         return data
+    }
+}
+
+/// Báo tiến độ tải lên của một yêu cầu.
+private final class UploadProgressDelegate: NSObject, URLSessionTaskDelegate {
+    let onProgress: ((Double) -> Void)?
+
+    init(onProgress: ((Double) -> Void)?) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64,
+                    totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
+        guard let onProgress, totalBytesExpectedToSend > 0 else { return }
+        let value = min(1, Double(totalBytesSent) / Double(totalBytesExpectedToSend))
+        DispatchQueue.main.async { onProgress(value) }
+    }
+}
+
+// MARK: - Bảng tin
+
+/// Người đăng bài / bình luận.
+struct FeedUser: Codable, Hashable {
+    let id: Int
+    let name: String
+    let username: String?
+    let avatar: String?
+    var online: Bool = false
+
+    var initial: String { String(name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased() }
+    var avatarURL: URL? { avatar.flatMap(URL.init(string:)) }
+    var socialUser: SocialUser { SocialUser(id: id, name: name, username: username, avatar: avatar, online: online) }
+
+    enum CodingKeys: String, CodingKey { case id, name, username, avatar, online }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Người học #\(id)"
+        username = try c.decodeIfPresent(String.self, forKey: .username)
+        avatar = try c.decodeIfPresent(String.self, forKey: .avatar)
+        online = (try? c.decodeIfPresent(Bool.self, forKey: .online)) ?? false
+    }
+}
+
+struct PostComment: Codable, Identifiable, Hashable {
+    let id: Int
+    let text: String
+    let createdAt: String
+    let mine: Bool
+    let user: FeedUser
+
+    enum CodingKeys: String, CodingKey { case id, text, createdAt, mine, user }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+        createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt) ?? ""
+        mine = try c.decodeIfPresent(Bool.self, forKey: .mine) ?? false
+        user = try c.decode(FeedUser.self, forKey: .user)
+    }
+}
+
+struct FeedPost: Codable, Identifiable, Hashable {
+    struct Audio: Codable, Hashable {
+        let url: String
+        var name: String?
+    }
+
+    struct Link: Codable, Hashable {
+        let url: String
+        var provider: String?
+    }
+
+    let id: Int
+    let kind: String
+    let text: String
+    let createdAt: String
+    let mine: Bool
+    let user: FeedUser
+    var image: SocialImage?
+    var audio: Audio?
+    var link: Link?
+    var room: ChatRoom?
+    var likeCount: Int = 0
+    var commentCount: Int = 0
+    var liked: Bool = false
+    var comments: [PostComment] = []
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, text, createdAt, mine, user, image, audio, link, room, likeCount, commentCount, liked, comments
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        kind = try c.decodeIfPresent(String.self, forKey: .kind) ?? "status"
+        text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
+        createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt) ?? ""
+        mine = try c.decodeIfPresent(Bool.self, forKey: .mine) ?? false
+        user = try c.decode(FeedUser.self, forKey: .user)
+        image = try? c.decodeIfPresent(SocialImage.self, forKey: .image)
+        audio = try? c.decodeIfPresent(Audio.self, forKey: .audio)
+        link = try? c.decodeIfPresent(Link.self, forKey: .link)
+        room = try? c.decodeIfPresent(ChatRoom.self, forKey: .room)
+        likeCount = (try? c.decodeIfPresent(Int.self, forKey: .likeCount)) ?? 0
+        commentCount = (try? c.decodeIfPresent(Int.self, forKey: .commentCount)) ?? 0
+        liked = (try? c.decodeIfPresent(Bool.self, forKey: .liked)) ?? false
+        comments = (try? c.decodeIfPresent([PostComment].self, forKey: .comments)) ?? []
     }
 }
 
@@ -566,6 +855,20 @@ enum SocialFormat {
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
+
+    /// "Vừa xong", "5 phút", "3 giờ", "2 ngày", xa hơn thì "12/09/2025".
+    static func ago(_ text: String?) -> String {
+        guard let date = date(text) else { return "" }
+        let minutes = Int(max(0, Date().timeIntervalSince(date)) / 60)
+        if minutes < 1 { return "Vừa xong" }
+        if minutes < 60 { return "\(minutes) phút" }
+        if minutes < 24 * 60 { return "\(minutes / 60) giờ" }
+        if minutes < 7 * 24 * 60 { return "\(minutes / 1440) ngày" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "vi_VN")
+        f.dateFormat = "dd/MM/yyyy"
+        return f.string(from: date)
+    }
 
     /// "14:05" nếu hôm nay, "Hôm qua 14:05", còn lại "12/09 14:05".
     static func time(_ text: String?) -> String {
