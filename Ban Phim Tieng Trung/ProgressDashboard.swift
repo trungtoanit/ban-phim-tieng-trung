@@ -140,6 +140,8 @@ struct WallProgressSection: View {
     var onTapWord: ((PinyinWord) -> Void)?
 
     @State private var failed = false
+    /// Lỗi đang mở "Cách khắc phục".
+    @State private var fixing: MistakeFixRequest?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let card = RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -165,6 +167,11 @@ struct WallProgressSection: View {
                     .foregroundStyle(.secondary)
             } else {
                 ProgressView().frame(maxWidth: .infinity).padding(.vertical, 20)
+            }
+        }
+        .sheet(item: $fixing) { request in
+            MistakeFixView(request: request) { word in
+                tapWord(word)
             }
         }
         .task(id: userID) {
@@ -381,7 +388,7 @@ struct WallProgressSection: View {
 
     private func mistakeChip(_ mistake: LearningProgress.Mistake) -> some View {
         Button {
-            tapWord(mistake.expected)
+            fixing = MistakeFixRequest(expected: mistake.expected, heard: mistake.heard, times: mistake.times)
         } label: {
             HStack(spacing: 6) {
                 VStack(spacing: 0) {
@@ -409,6 +416,7 @@ struct WallProgressSection: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Đọc \(mistake.expected) thành \(mistake.heard), \(mistake.times) lần")
+        .accessibilityHint("Xem cách khắc phục")
     }
 }
 
