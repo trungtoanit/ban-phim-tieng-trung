@@ -4,6 +4,7 @@
 //  Dữ liệu dùng chung với trang ban-be.php của website (api/social.php).
 //
 
+import PhotosUI
 import SwiftUI
 
 let socialRed = Color(red: 0.86, green: 0.17, blue: 0.16)
@@ -554,6 +555,7 @@ struct SocialProfileView: View {
     /// Có khi là tường của chính mình ở mục Hồ sơ: hiện nút "Đăng xuất" (giống web).
     var onSignOut: (() -> Void)?
     @State private var confirmSignOut = false
+    @State private var editingProfile = false
     @State private var selectedWord: SelectedWord?
     @State private var tab: WallTab = WallTab.last
     /// Dữ liệu tiến bộ đã tải: đổi tab chỉ chạy lại hoạt ảnh, không tải lại.
@@ -585,23 +587,38 @@ struct SocialProfileView: View {
                     .disabled(busy)
                     .padding(.horizontal, 40)
                 }
-                if onSignOut != nil {
-                    Button {
-                        confirmSignOut = true
-                    } label: {
-                        Label("Đăng xuất", systemImage: "rectangle.portrait.and.arrow.right")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(socialRed)
-                            .padding(.horizontal, 22)
-                            .padding(.vertical, 10)
-                            .background(Capsule().strokeBorder(socialRed, lineWidth: 1.5))
-                    }
-                    .buttonStyle(.plain)
-                    .confirmationDialog("Đăng xuất khỏi tài khoản?", isPresented: $confirmSignOut, titleVisibility: .visible) {
-                        Button("Đăng xuất", role: .destructive) { onSignOut?() }
-                        Button("Huỷ", role: .cancel) {}
-                    } message: {
-                        Text("Bạn sẽ cần đăng nhập lại để dùng Bạn bè, Phòng chat và đồng bộ với website.")
+                if user.isMe || onSignOut != nil {
+                    HStack(spacing: 10) {
+                        Button {
+                            editingProfile = true
+                        } label: {
+                            Label("Sửa hồ sơ", systemImage: "pencil")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 10)
+                                .background(Capsule().fill(Color(.secondarySystemGroupedBackground)))
+                        }
+                        .buttonStyle(.plain)
+                        if onSignOut != nil {
+                            Button {
+                                confirmSignOut = true
+                            } label: {
+                                Label("Đăng xuất", systemImage: "rectangle.portrait.and.arrow.right")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(socialRed)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 10)
+                                    .background(Capsule().fill(socialRed.opacity(0.1)))
+                            }
+                            .buttonStyle(.plain)
+                            .confirmationDialog("Đăng xuất khỏi tài khoản?", isPresented: $confirmSignOut, titleVisibility: .visible) {
+                                Button("Đăng xuất", role: .destructive) { onSignOut?() }
+                                Button("Huỷ", role: .cancel) {}
+                            } message: {
+                                Text("Bạn sẽ cần đăng nhập lại để dùng Bạn bè, Phòng chat và đồng bộ với website.")
+                            }
+                        }
                     }
                 }
                 wallTabBar
@@ -632,6 +649,12 @@ struct SocialProfileView: View {
         }
         .alert("Tình huống này không còn nữa", isPresented: $topicMissing) {
             Button("OK", role: .cancel) {}
+        }
+        .sheet(isPresented: $editingProfile) {
+            EditProfileSheet(user: user) { updated in
+                user.applyProfile(from: updated)
+                if let model { Task { await model.load() } }
+            }
         }
         .navigationTitle(user.isMe ? "Tường của tôi" : user.name)
         .navigationBarTitleDisplayMode(.inline)
@@ -784,6 +807,14 @@ struct SocialProfileView: View {
                 .multilineTextAlignment(.center)
             if let handle = user.handle {
                 Text(handle).font(.subheadline).foregroundStyle(.secondary)
+            }
+            if let bio = user.bio?.trimmingCharacters(in: .whitespacesAndNewlines), !bio.isEmpty {
+                Text(bio)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
             }
             HStack(spacing: 6) {
                 if let joined = SocialFormat.joined(user.joinedAt) {
@@ -1240,5 +1271,300 @@ private struct TopicRowStyle: ButtonStyle {
             )
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Sửa hồ sơ
+
+/// Sheet sửa tên, tên đăng nhập, giới thiệu và ảnh đại diện của chính mình.
+struct EditProfileSheet: View {
+    /// Báo hồ sơ mới (sau khi đổi ảnh hoặc bấm Lưu) để tường cập nhật ngay.
+    let onUpdate: (SocialUser) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var user: SocialUser
+    @State private var name: String
+    @State private var username: String
+    @State private var bio: String
+    @State private var saving = false
+    @State private var saveError: String?
+
+    @State private var choosingAvatar = false
+    @State private var pickingPhoto = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var showCamera = false
+    @State private var uploading = false
+    @State private var uploadProgress: Double = 0
+    @State private var avatarError: String?
+
+    private static let bioLimit = 160
+
+    init(user: SocialUser, onUpdate: @escaping (SocialUser) -> Void) {
+        self.onUpdate = onUpdate
+        _user = State(initialValue: user)
+        _name = State(initialValue: user.name)
+        _username = State(initialValue: user.username ?? "")
+        _bio = State(initialValue: user.bio ?? "")
+    }
+
+    // MARK: Kiểm tra (trùng quy tắc máy chủ)
+
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
+    private var trimmedUsername: String { username.trimmingCharacters(in: .whitespaces) }
+    private var trimmedBio: String { bio.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var nameError: String? {
+        (2...50).contains(trimmedName.count) ? nil : "Tên hiển thị cần từ 2 đến 50 ký tự."
+    }
+
+    private var usernameError: String? {
+        let value = trimmedUsername
+        if value.isEmpty { return nil }
+        if !(3...32).contains(value.count) { return "Tên đăng nhập cần từ 3 đến 32 ký tự." }
+        if value.range(of: "^[a-z0-9][a-z0-9_.]{2,31}$", options: .regularExpression) == nil {
+            return "Chỉ dùng chữ thường không dấu, số, dấu chấm hoặc gạch dưới, bắt đầu bằng chữ hoặc số."
+        }
+        return nil
+    }
+
+    private var bioError: String? {
+        bio.count > Self.bioLimit ? "Giới thiệu tối đa \(Self.bioLimit) ký tự." : nil
+    }
+
+    private var isValid: Bool { nameError == nil && usernameError == nil && bioError == nil }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    avatarHeader
+                        .frame(maxWidth: .infinity)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 8, trailing: 0))
+                }
+
+                Section {
+                    TextField("Tên của bạn", text: $name)
+                        .textContentType(.name)
+                        .submitLabel(.done)
+                } header: {
+                    Text("Tên hiển thị")
+                } footer: {
+                    if let nameError { validation(nameError) }
+                }
+
+                Section {
+                    HStack(spacing: 2) {
+                        Text("@").foregroundStyle(.secondary)
+                        TextField("ten_dang_nhap", text: $username)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .keyboardType(.asciiCapable)
+                            .textContentType(.username)
+                    }
+                } header: {
+                    Text("Tên đăng nhập")
+                } footer: {
+                    if let usernameError {
+                        validation(usernameError)
+                    } else {
+                        Text("Chữ thường không dấu, số, dấu chấm hoặc gạch dưới")
+                    }
+                }
+
+                Section {
+                    TextEditor(text: $bio)
+                        .frame(minHeight: 90)
+                } header: {
+                    Text("Giới thiệu")
+                } footer: {
+                    HStack(alignment: .top) {
+                        if let bioError { validation(bioError) }
+                        Spacer(minLength: 8)
+                        Text("\(bio.count)/\(Self.bioLimit)")
+                            .monospacedDigit()
+                            .foregroundStyle(bio.count > Self.bioLimit ? Color.red : Color.secondary)
+                    }
+                }
+
+                if let saveError {
+                    Section {
+                        Label(saveError, systemImage: "exclamationmark.circle.fill")
+                            .font(.subheadline)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            .navigationTitle("Sửa hồ sơ")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Huỷ") { dismiss() }
+                        .disabled(saving)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if saving {
+                        ProgressView()
+                    } else {
+                        Button("Lưu") { Task { await save() } }
+                            .fontWeight(.semibold)
+                            .disabled(!isValid || uploading)
+                    }
+                }
+            }
+            .onChange(of: username) { value in
+                let lowered = value.lowercased().replacingOccurrences(of: " ", with: "")
+                if lowered != value { username = lowered }
+            }
+            .interactiveDismissDisabled(saving || uploading)
+            .confirmationDialog("Ảnh đại diện", isPresented: $choosingAvatar, titleVisibility: .visible) {
+                Button("Chọn từ thư viện") { pickingPhoto = true }
+                if CameraPicker.isAvailable {
+                    Button("Chụp ảnh") { showCamera = true }
+                }
+                if user.avatarURL != nil {
+                    Button("Xoá ảnh", role: .destructive) { Task { await removeAvatar() } }
+                }
+                Button("Huỷ", role: .cancel) {}
+            }
+            .photosPicker(isPresented: $pickingPhoto, selection: $photoItem, matching: .images)
+            .onChange(of: photoItem) { item in
+                guard let item else { return }
+                photoItem = nil
+                Task {
+                    guard let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) else {
+                        avatarError = "Không đọc được ảnh này."
+                        return
+                    }
+                    await uploadAvatar(image)
+                }
+            }
+            .fullScreenCover(isPresented: $showCamera) {
+                CameraPicker { image in
+                    Task { await uploadAvatar(image) }
+                }
+                .ignoresSafeArea()
+            }
+        }
+    }
+
+    private func validation(_ text: String) -> some View {
+        Text(text).foregroundStyle(.red)
+    }
+
+    // MARK: Ảnh đại diện
+
+    private var avatarHeader: some View {
+        VStack(spacing: 10) {
+            Button {
+                avatarError = nil
+                choosingAvatar = true
+            } label: {
+                SocialAvatar(url: user.avatarURL, initial: String(trimmedName.prefix(1)).uppercased(), size: 110,
+                             ring: Color(.systemGroupedBackground))
+                    .overlay {
+                        if uploading {
+                            ZStack {
+                                Circle().fill(Color.black.opacity(0.45))
+                                VStack(spacing: 4) {
+                                    ProgressView().tint(.white)
+                                    if uploadProgress > 0 {
+                                        Text("\(Int(uploadProgress * 100))%")
+                                            .font(.caption2.weight(.semibold).monospacedDigit())
+                                            .foregroundStyle(.white)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .overlay(alignment: .bottomTrailing) {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 34, height: 34)
+                            .background(Circle().fill(socialRed))
+                            .overlay(Circle().stroke(Color(.systemGroupedBackground), lineWidth: 3))
+                    }
+            }
+            .buttonStyle(.plain)
+            .disabled(uploading || saving)
+            .accessibilityLabel("Đổi ảnh đại diện")
+
+            if let avatarError {
+                Text(avatarError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+            } else {
+                Text(uploading ? "Đang tải ảnh lên…" : "Chạm để đổi ảnh")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func uploadAvatar(_ image: UIImage) async {
+        guard let jpeg = SocialImageCompressor.jpeg(from: image, maxSide: 1024, quality: 0.85) else {
+            avatarError = "Không đọc được ảnh này."
+            return
+        }
+        guard jpeg.count <= 8 * 1024 * 1024 else {
+            avatarError = "Ảnh quá lớn (tối đa 8MB)."
+            return
+        }
+        avatarError = nil
+        uploadProgress = 0
+        uploading = true
+        defer { uploading = false }
+        do {
+            let updated = try await SocialAPI.uploadAvatar(jpeg: jpeg) { value in
+                uploadProgress = value
+            }
+            applyAvatar(updated)
+        } catch is CancellationError {
+        } catch {
+            avatarError = error.localizedDescription
+        }
+    }
+
+    private func removeAvatar() async {
+        avatarError = nil
+        uploadProgress = 0
+        uploading = true
+        defer { uploading = false }
+        do {
+            applyAvatar(try await SocialAPI.removeAvatar())
+        } catch is CancellationError {
+        } catch {
+            avatarError = error.localizedDescription
+        }
+    }
+
+    /// Ảnh đã lưu trên máy chủ: đổi ngay trên tường (không đụng tên / giới thiệu đang sửa dở).
+    private func applyAvatar(_ updated: SocialUser) {
+        user.avatar = updated.avatar
+        onUpdate(user)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+
+    // MARK: Lưu
+
+    private func save() async {
+        guard isValid else { return }
+        saveError = nil
+        saving = true
+        defer { saving = false }
+        do {
+            let updated = try await SocialAPI.updateProfile(name: trimmedName, username: trimmedUsername, bio: trimmedBio)
+            user.applyProfile(from: updated)
+            if updated.bio == nil { user.bio = trimmedBio }
+            onUpdate(user)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            dismiss()
+        } catch is CancellationError {
+        } catch {
+            saveError = error.localizedDescription
+        }
     }
 }

@@ -95,9 +95,11 @@ struct WallRoom: Codable, Hashable, Identifiable {
 /// Hồ sơ công khai của một người học (không bao giờ có email).
 struct SocialUser: Codable, Identifiable, Hashable {
     let id: Int
-    let name: String
-    let username: String?
-    let avatar: String?
+    var name: String
+    var username: String?
+    var avatar: String?
+    /// Giới thiệu ngắn (≤160 ký tự), có thể rỗng.
+    var bio: String?
     var weekSentences: Int = 0
     var todaySentences: Int = 0
     var totalSentences: Int = 0
@@ -132,10 +134,18 @@ struct SocialUser: Codable, Identifiable, Hashable {
     var avatarURL: URL? { avatar.flatMap(URL.init(string:)) }
 
     enum CodingKeys: String, CodingKey {
-        case id, name, username, avatar, weekSentences, todaySentences, totalSentences, streak
+        case id, name, username, avatar, bio, weekSentences, todaySentences, totalSentences, streak
         case isMe, following, followsMe, online, lastSeenAt, followersCount, followingCount, joinedAt
         case bestStreak, activeDays, accuracy, avgCpm, topicsCount, topicsCompleted
         case calendar, badges, recentTopics, rooms, medals, awards
+    }
+
+    /// Chép tên, username, ảnh đại diện, giới thiệu từ hồ sơ máy chủ vừa trả về (sửa hồ sơ).
+    mutating func applyProfile(from other: SocialUser) {
+        name = other.name
+        username = other.username
+        avatar = other.avatar
+        if let bio = other.bio { self.bio = bio }
     }
 
     /// Hồ sơ tạm từ thông tin rút gọn (tác giả tin nhắn, thành viên phòng); tường tải thêm từ máy chủ.
@@ -153,6 +163,7 @@ struct SocialUser: Codable, Identifiable, Hashable {
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Người học #\(id)"
         username = try c.decodeIfPresent(String.self, forKey: .username)
         avatar = try c.decodeIfPresent(String.self, forKey: .avatar)
+        bio = try? c.decodeIfPresent(String.self, forKey: .bio)
         weekSentences = try c.decodeIfPresent(Int.self, forKey: .weekSentences) ?? 0
         todaySentences = try c.decodeIfPresent(Int.self, forKey: .todaySentences) ?? 0
         totalSentences = try c.decodeIfPresent(Int.self, forKey: .totalSentences) ?? 0
@@ -675,6 +686,30 @@ enum SocialAPI {
 
     static func unfollow(userId: Int) async throws -> SocialUser {
         guard let user = try await call("unfollow", ["userId": userId]).user else { throw missing }
+        return user
+    }
+
+    // MARK: Sửa hồ sơ
+
+    /// Đổi tên hiển thị, tên đăng nhập (bỏ trống thì giữ nguyên) và giới thiệu.
+    static func updateProfile(name: String, username: String?, bio: String) async throws -> SocialUser {
+        var params: [String: Any] = ["name": name, "bio": bio]
+        if let username, !username.isEmpty { params["username"] = username }
+        guard let user = try await call("profile_update", params).user else { throw missing }
+        return user
+    }
+
+    /// Tải ảnh đại diện (JPEG); máy chủ cắt vuông 400px.
+    static func uploadAvatar(jpeg: Data, progress: ((Double) -> Void)? = nil) async throws -> SocialUser {
+        let e = try await multipart("avatar_upload", fields: [:],
+                                    files: [UploadFile(field: "avatar", filename: "avatar.jpg", mimeType: "image/jpeg", data: jpeg)],
+                                    progress: progress)
+        guard let user = e.user else { throw missing }
+        return user
+    }
+
+    static func removeAvatar() async throws -> SocialUser {
+        guard let user = try await call("avatar_remove").user else { throw missing }
         return user
     }
 
