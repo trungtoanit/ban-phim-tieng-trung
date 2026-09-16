@@ -556,6 +556,8 @@ struct SocialProfileView: View {
     @State private var confirmSignOut = false
     @State private var selectedWord: SelectedWord?
     @State private var tab: WallTab = WallTab.last
+    /// Dữ liệu tiến bộ đã tải: đổi tab chỉ chạy lại hoạt ảnh, không tải lại.
+    @State private var progressCache: LearningProgress?
 
     init(user: SocialUser, model: FriendsModel? = nil, onSignOut: (() -> Void)? = nil) {
         _user = State(initialValue: user)
@@ -622,6 +624,10 @@ struct SocialProfileView: View {
             async let posts: Void = postsFeed.load()
             await reload()
             await posts
+            // Kéo làm mới ở tab Kỹ năng thì tải lại cả biểu đồ tiến bộ.
+            if tab == .skills, let fresh = try? await ProgressAPI.progress(userId: user.id) {
+                progressCache = fresh
+            }
         }
         .task {
             async let posts: Void = postsFeed.loaded ? () : postsFeed.load()
@@ -693,7 +699,7 @@ struct SocialProfileView: View {
         .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
     }
 
-    /// Tường: bài đăng, tình huống gần đây, phòng chat đã tạo.
+    /// Tường: chỉ bài đăng (ô soạn bài trên tường của mình + danh sách bài).
     @ViewBuilder
     private var wallTabContent: some View {
         // Lazy: bài đăng tải thêm khi cuộn tới cuối.
@@ -707,12 +713,10 @@ struct SocialProfileView: View {
                 }
             }
             FeedPostsList(feed: postsFeed, emptyText: user.isMe ? "Bạn chưa đăng bài nào." : "\(user.name) chưa đăng bài nào.")
-            if !user.recentTopics.isEmpty { topicsCard }
-            if !user.rooms.isEmpty { roomsCard }
         }
     }
 
-    /// Kỹ năng: thống kê, huân chương, tiến bộ, lịch 5 tuần, thành tích.
+    /// Kỹ năng: thống kê, huân chương, tiến bộ, lịch 5 tuần, thành tích, tình huống gần đây, phòng chat đã tạo.
     @ViewBuilder
     private var skillsTabContent: some View {
         VStack(spacing: 18) {
@@ -721,11 +725,13 @@ struct SocialProfileView: View {
             }
             statsGrid
             WallMedalsCard(medals: user.medals, awards: user.awards)
-            WallProgressSection(userID: user.id, isMe: user.isMe, name: user.name) { word in
+            WallProgressSection(userID: user.id, isMe: user.isMe, name: user.name, progress: $progressCache) { word in
                 selectedWord = SelectedWord(word: word)
             }
             if !user.calendar.isEmpty { calendarCard }
             if !user.badges.isEmpty { badgesCard }
+            if !user.recentTopics.isEmpty { topicsCard }
+            if !user.rooms.isEmpty { roomsCard }
         }
     }
 

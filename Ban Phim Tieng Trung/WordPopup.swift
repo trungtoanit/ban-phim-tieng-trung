@@ -143,6 +143,13 @@ private struct WordPopupCard: View {
                 meaning = saved.meaning
                 return
             }
+            // Đã đăng nhập website: tra kho từ chung của máy chủ (mỗi từ chỉ nhờ AI soạn một lần cho mọi người).
+            if WebAccountStore.shared.isSignedIn, let insight = try? await SharedWordAPI.lookup(text) {
+                WordInsightCache.set(insight, for: text)
+                meaningFailed = insight.meaning.isEmpty
+                meaning = insight.meaning.isEmpty ? "Chưa có nghĩa cho từ này." : insight.meaning
+                return
+            }
             let result = try? await Translator.translate(text, from: "zh-CN", to: "vi")
             meaningFailed = result == nil
             meaning = result ?? "Không tra được nghĩa — kiểm tra kết nối mạng."
@@ -368,6 +375,18 @@ struct WordInsightView: View {
             return
         }
         forceRefresh = false
+        // Đã đăng nhập website: dùng kho từ chung trên máy chủ, không cần khoá OpenAI.
+        if WebAccountStore.shared.isSignedIn {
+            do {
+                let result = try await SharedWordAPI.lookup(text)
+                WordInsightCache.set(result, for: text)
+                insight = result
+                fromCache = false
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            return
+        }
         guard OpenAISettings.hasAPIKey else {
             errorMessage = "Cần khoá OpenAI để soạn phần giải thích chi tiết."
             return
@@ -584,5 +603,85 @@ struct WordInsightView: View {
         .padding(24)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
             .fill(Color(.secondarySystemGroupedBackground)))
+    }
+}
+
+// MARK: - Kho từ chung trên máy chủ
+
+/// `api/conversation.php?action=word&text=`: giải thích từ lưu chung cho mọi người học
+/// (AI chỉ soạn một lần cho mỗi từ). Cùng dạng với `WordInsight`.
+enum SharedWordAPI {
+    private struct Envelope: Decodable {
+        let ok: Bool
+        let error: String?
+        let login: Bool?
+        let word: ServerWord?
+    }
+
+    private struct ServerWord: Decodable {
+        struct Syllable: Decodable {
+            let hanzi: String?
+            let pinyin: String?
+            let soundsLike: String?
+            let tip: String?
+        }
+
+        struct Example: Decodable {
+            let zh: String?
+            let pinyin: String?
+            let vi: String?
+        }
+
+        let hanzi: String?
+        let pinyin: String?
+        let hanViet: String?
+        let meaning: String?
+        let wordType: String?
+        let soundsLike: String?
+        let syllables: [Syllable]?
+        let examples: [Example]?
+        let note: String?
+    }
+
+    static func lookup(_ text: String) async throws -> WordInsight {
+        guard let token = WebAccountStore.shared.token else {
+            throw WebBackendError(message: "Chưa đăng nhập website.", needsLogin: true)
+        }
+        var components = URLComponents(url: WebBackend.baseURL.appendingPathComponent("api/conversation.php"),
+                                       resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "action", value: "word"), URLQueryItem(name: "text", value: text)]
+        var request = URLRequest(url: components.url!)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(token, forHTTPHeaderField: "X-Api-Token")
+        // Từ chưa có trong kho thì máy chủ phải nhờ AI soạn: chờ lâu hơn bình thường.
+        request.timeoutInterval = 60
+        let data: Data
+        do {
+            (data, _) = try await URLSession.shared.data(for: request)
+        } catch {
+            if error is CancellationError || (error as? URLError)?.code == .cancelled { throw CancellationError() }
+            throw WebBackendError(message: "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.")
+        }
+        guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else {
+            throw WebBackendError(message: "Máy chủ trả về dữ liệu lỗi. Hãy thử lại sau.")
+        }
+        guard envelope.ok, let word = envelope.word else {
+            throw WebBackendError(message: envelope.error ?? "Chưa tra được từ này.", needsLogin: envelope.login == true)
+        }
+        return WordInsight(
+            hanzi: word.hanzi ?? text,
+            pinyin: word.pinyin ?? "",
+            hanViet: word.hanViet ?? "",
+            meaning: word.meaning ?? "",
+            wordType: word.wordType ?? "",
+            soundsLike: word.soundsLike ?? "",
+            syllables: (word.syllables ?? []).map {
+                WordInsight.Syllable(hanzi: $0.hanzi ?? "", pinyin: $0.pinyin ?? "", soundsLike: $0.soundsLike ?? "", tip: $0.tip ?? "")
+            },
+            examples: (word.examples ?? []).map {
+                WordInsight.Example(zh: $0.zh ?? "", pinyin: $0.pinyin ?? "", vi: $0.vi ?? "")
+            },
+            note: word.note ?? ""
+        )
     }
 }

@@ -135,9 +135,10 @@ struct WallProgressSection: View {
     let userID: Int
     let isMe: Bool
     let name: String
+    /// Giữ ở view cha để đổi tab không phải tải lại.
+    @Binding var progress: LearningProgress?
     var onTapWord: ((PinyinWord) -> Void)?
 
-    @State private var progress: LearningProgress?
     @State private var failed = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -167,6 +168,7 @@ struct WallProgressSection: View {
             }
         }
         .task(id: userID) {
+            guard progress == nil else { return }
             do {
                 progress = try await ProgressAPI.progress(userId: userID)
             } catch is CancellationError {
