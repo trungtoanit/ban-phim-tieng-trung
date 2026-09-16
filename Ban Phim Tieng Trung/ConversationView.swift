@@ -95,7 +95,11 @@ struct ConversationTopicsView: View {
                     webConversations = state.conversations
                     if !Self.autoOpenedLatest, customScenario == nil, let latest = state.conversations.first {
                         Self.autoOpenedLatest = true
-                        customScenario = latest.scenario
+                        // Đợi màn danh sách dựng xong thanh điều hướng rồi mới đẩy màn nói,
+                        // đẩy ngay lúc vừa hiện làm tiêu đề bị vẽ đè lên thanh trạng thái.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                            if customScenario == nil, isVisible { customScenario = latest.scenario }
+                        }
                     }
                     withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { webStats = state.stats }
                     webLoading = false
@@ -751,8 +755,10 @@ struct ConversationView: View {
                     LazyVStack(spacing: 14) {
                         if session.isRemote, let unit = remoteConversation {
                             unitCard(unit)
+                            chatHint
+                        } else {
+                            header
                         }
-                        header
                         ForEach(session.messages) { message in
                             bubble(message)
                                 .id(message.id)
@@ -980,37 +986,89 @@ struct ConversationView: View {
     /// Thẻ tình huống đỏ giống web: "☕ TÌNH HUỐNG · 15/50 CÂU", tên, chú thích, thanh tiến độ.
     private func unitCard(_ unit: WebConversationAPI.Conversation) -> some View {
         let done = min(unit.userTurns, unit.target)
-        return VStack(alignment: .leading, spacing: 4) {
-            Text("\(unit.emoji) Tình huống · \(done)/\(unit.target) câu\(unit.userTurns >= unit.target ? " · Hoàn thành 🎉" : "")".uppercased())
-                .font(.caption2.weight(.bold))
-                .kerning(0.6)
-                .opacity(0.9)
-                .contentTransition(.numericText())
-            Text(unit.title)
-                .font(.headline.weight(.heavy))
-            Text(unit.caption.isEmpty ? "Bạn là \(unit.userRole.lowercased()) · nói chuyện với \(unit.partnerRole.lowercased())" : unit.caption)
-                .font(.caption)
-                .opacity(0.92)
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(.white.opacity(0.3))
-                    Capsule().fill(.white)
-                        .frame(width: geo.size.width * min(1, CGFloat(unit.userTurns) / CGFloat(max(unit.target, 1))))
+        let progress = min(1, CGFloat(unit.userTurns) / CGFloat(max(unit.target, 1)))
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                Text(unit.emoji)
+                    .font(.system(size: 30))
+                    .frame(width: 52, height: 52)
+                    .background(Circle().fill(.white.opacity(0.18)))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(unit.userTurns >= unit.target ? "TÌNH HUỐNG · HOÀN THÀNH 🎉" : "TÌNH HUỐNG")
+                        .font(.caption2.weight(.heavy))
+                        .kerning(0.8)
+                        .opacity(0.85)
+                    Text(unit.title)
+                        .font(.title3.weight(.heavy))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.85)
+                    if !unit.caption.isEmpty {
+                        Text(unit.caption)
+                            .font(.footnote)
+                            .opacity(0.9)
+                            .lineLimit(2)
+                    }
                 }
+                Spacer(minLength: 0)
             }
-            .frame(height: 8)
-            .padding(.top, 4)
+            HStack(spacing: 10) {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(.white.opacity(0.28))
+                        Capsule().fill(.white)
+                            .frame(width: max(8, geo.size.width * progress))
+                    }
+                }
+                .frame(height: 8)
+                Text("\(done)/\(unit.target) câu")
+                    .font(.caption.weight(.heavy))
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            }
         }
         .foregroundStyle(.white)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(brandRed)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(LinearGradient(colors: [brandRed, Color(red: 0.93, green: 0.33, blue: 0.2)],
+                                     startPoint: .topLeading, endPoint: .bottomTrailing))
                 .shadow(color: Color(red: 0.72, green: 0.14, blue: 0.11), radius: 0, y: 4)
         )
-        .padding(.bottom, 4)
+        .padding(.bottom, 2)
+    }
+
+    /// Vai của bạn / AI và gợi ý cách nói, gọn trong 1 dòng chip (thay cho khối chữ giữa màn).
+    private var chatHint: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                roleChip("🙋", "Bạn", session.scenario.userRole)
+                roleChip(session.scenario.partnerEmoji, "AI", session.scenario.partnerRole)
+            }
+            if !session.needsResumeChoice {
+                Label(session.handsFree ? "Rảnh tay: AI nói xong là micro tự mở" : "Bấm micro rồi nói tiếng Trung",
+                      systemImage: session.handsFree ? "infinity" : "mic.fill")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 2)
+    }
+
+    private func roleChip(_ emoji: String, _ label: String, _ role: String) -> some View {
+        HStack(spacing: 6) {
+            Text(emoji).font(.system(size: 15))
+            Text(label).font(.caption.weight(.heavy)).foregroundStyle(brandRed)
+            Text(role.prefix(1).uppercased() + role.dropFirst())
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Capsule().fill(Color(.secondarySystemGroupedBackground)))
+        .overlay(Capsule().strokeBorder(Color(.separator).opacity(0.6), lineWidth: 1))
     }
 
     /// Badge chấm câu nói giống web: 🎯 % đọc đúng, ⚡ chữ/phút.
@@ -1065,7 +1123,10 @@ struct ConversationView: View {
         case .partner:
             HStack(alignment: .top, spacing: 8) {
                 Text(session.scenario.partnerEmoji)
-                    .font(.system(size: 24))
+                    .font(.system(size: 20))
+                    .frame(width: 36, height: 36)
+                    .background(Circle().fill(Color(.secondarySystemGroupedBackground)))
+                    .overlay(Circle().strokeBorder(Color(.separator).opacity(0.5), lineWidth: 1))
                 VStack(alignment: .leading, spacing: 6) {
                     ruby(message.line, size: 19)
                     HStack(alignment: .top) {
@@ -1082,7 +1143,9 @@ struct ConversationView: View {
                     }
                 }
                 .padding(12)
-                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+                .background(RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color(.secondarySystemGroupedBackground))
+                    .shadow(color: .black.opacity(0.06), radius: 6, y: 2))
                 Spacer(minLength: 24)
             }
         case .user:
