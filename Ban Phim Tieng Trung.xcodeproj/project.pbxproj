@@ -68,6 +68,7 @@
 		B1000000000000000000F003 /* RoomGifts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000F004 /* RoomGifts.swift */; };
 		B1000000000000000000F005 /* WeeklyMedals.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000F006 /* WeeklyMedals.swift */; };
 		B1000000000000000000F007 /* ProgressDashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000F008 /* ProgressDashboard.swift */; };
+		B1000000000000000000F009 /* MetricDetail.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000F00A /* MetricDetail.swift */; };
 		B100000000000000000005C1 /* SocialAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000005C2 /* SocialAPI.swift */; };
 		B100000000000000000004C3 /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000004C4 /* AccountView.swift */; };
 		B100000000000000000004C5 /* CloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000004C6 /* CloudSync.swift */; };
@@ -155,6 +156,7 @@
 		B1000000000000000000F004 /* RoomGifts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomGifts.swift; sourceTree = "<group>"; };
 		B1000000000000000000F006 /* WeeklyMedals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeeklyMedals.swift; sourceTree = "<group>"; };
 		B1000000000000000000F008 /* ProgressDashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressDashboard.swift; sourceTree = "<group>"; };
+		B1000000000000000000F00A /* MetricDetail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricDetail.swift; sourceTree = "<group>"; };
 		B100000000000000000005C2 /* SocialAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialAPI.swift; sourceTree = "<group>"; };
 		B100000000000000000004C4 /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
 		B100000000000000000004C6 /* CloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSync.swift; sourceTree = "<group>"; };
@@ -229,6 +231,7 @@
 				B1000000000000000000F004 /* RoomGifts.swift */,
 				B1000000000000000000F006 /* WeeklyMedals.swift */,
 				B1000000000000000000F008 /* ProgressDashboard.swift */,
+				B1000000000000000000F00A /* MetricDetail.swift */,
 				B100000000000000000005C2 /* SocialAPI.swift */,
 				B100000000000000000004C4 /* AccountView.swift */,
 				B100000000000000000004C6 /* CloudSync.swift */,
@@ -420,6 +423,7 @@
 				B1000000000000000000F003 /* RoomGifts.swift in Sources */,
 				B1000000000000000000F005 /* WeeklyMedals.swift in Sources */,
 				B1000000000000000000F007 /* ProgressDashboard.swift in Sources */,
+				B1000000000000000000F009 /* MetricDetail.swift in Sources */,
 				B100000000000000000005C1 /* SocialAPI.swift in Sources */,
 				B100000000000000000004C3 /* AccountView.swift in Sources */,
 				B100000000000000000004C5 /* CloudSync.swift in Sources */,

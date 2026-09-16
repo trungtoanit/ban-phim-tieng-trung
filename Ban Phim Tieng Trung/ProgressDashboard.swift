@@ -151,7 +151,7 @@ struct WallProgressSection: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if let progress {
-                ComparisonCards(progress: progress, isMe: isMe, name: name)
+                ComparisonCards(progress: progress, userID: userID, isMe: isMe, name: name)
                 if hasWeeklySpeech(progress) { accuracySpeedChart(progress) }
                 sentencesChart(progress)
                 charsChart(progress)
@@ -416,8 +416,12 @@ struct WallProgressSection: View {
 
 private struct ComparisonCards: View {
     let progress: LearningProgress
+    let userID: Int
     let isMe: Bool
     let name: String
+
+    /// Thẻ vừa chạm: mở trang phân tích chi tiết.
+    @State private var detail: MetricDetailRequest?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -496,9 +500,27 @@ private struct ComparisonCards: View {
             }
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                 ForEach(metrics) { metric in
-                    MetricCard(metric: metric, reduceMotion: reduceMotion)
+                    Button {
+                        if let kind = ProgressMetric(cardID: metric.id) {
+                            UISelectionFeedbackGenerator().selectionChanged()
+                            detail = MetricDetailRequest(metric: kind, userID: userID, isMe: isMe, name: name)
+                        }
+                    } label: {
+                        MetricCard(metric: metric, reduceMotion: reduceMotion)
+                            .overlay(alignment: .topTrailing) {
+                                Image(systemName: "chevron.right")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.tertiary)
+                                    .padding(10)
+                            }
+                    }
+                    .buttonStyle(MetricCardPressStyle())
+                    .accessibilityHint("Xem phân tích chi tiết")
                 }
             }
+        }
+        .sheet(item: $detail) { request in
+            MetricDetailView(request: request)
         }
     }
 }
@@ -594,7 +616,7 @@ private struct CountingText: View, Animatable {
 }
 
 /// Biểu đồ "mọc" từ 0 lên khi xuất hiện.
-private struct AnimatedChart<Content: View>: View {
+struct AnimatedChart<Content: View>: View {
     let reduceMotion: Bool
     @ViewBuilder let content: (Double) -> Content
 
@@ -712,5 +734,15 @@ private struct FixedChip: View {
             }
         }
         .accessibilityLabel("Đã khắc phục \(item.expected)")
+    }
+}
+
+/// Thẻ chỉ số bấm được: thu nhỏ nhẹ khi nhấn.
+private struct MetricCardPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .brightness(configuration.isPressed ? -0.03 : 0)
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
