@@ -555,6 +555,7 @@ struct SocialProfileView: View {
     var onSignOut: (() -> Void)?
     @State private var confirmSignOut = false
     @State private var selectedWord: SelectedWord?
+    @State private var tab: WallTab = WallTab.last
 
     init(user: SocialUser, model: FriendsModel? = nil, onSignOut: (() -> Void)? = nil) {
         _user = State(initialValue: user)
@@ -596,25 +597,17 @@ struct SocialProfileView: View {
                         Text("Bạn sẽ cần đăng nhập lại để dùng Bạn bè, Phòng chat và đồng bộ với website.")
                     }
                 }
-                statsGrid
-                WallMedalsCard(medals: user.medals, awards: user.awards)
-                WallProgressSection(userID: user.id, isMe: user.isMe, name: user.name) { word in
-                    selectedWord = SelectedWord(word: word)
-                }
-                if !user.calendar.isEmpty { calendarCard }
-                if !user.badges.isEmpty { badgesCard }
-                if !user.recentTopics.isEmpty { topicsCard }
-                if !user.rooms.isEmpty { roomsCard }
-                if !loaded {
-                    ProgressView().padding(.top, 8)
-                }
-                sectionTitle("Bài đăng")
-                if user.isMe {
-                    FeedComposerCard(me: user) { post in
-                        postsFeed.insert(post)
+                wallTabBar
+                Group {
+                    switch tab {
+                    case .wall:
+                        wallTabContent
+                    case .skills:
+                        skillsTabContent
                     }
                 }
-                FeedPostsList(feed: postsFeed, emptyText: user.isMe ? "Bạn chưa đăng bài nào." : "\(user.name) chưa đăng bài nào.")
+                .id(tab)
+                .transition(.opacity)
             }
             .padding(.horizontal)
             .padding(.bottom, 24)
@@ -644,6 +637,95 @@ struct SocialProfileView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
+        }
+    }
+
+    // MARK: Tab Tường / Kỹ năng
+
+    enum WallTab: Hashable {
+        case wall, skills
+
+        /// Tab chọn gần nhất (nhớ trong lúc app đang mở).
+        static var last: WallTab = .wall
+    }
+
+    @Namespace private var tabUnderline
+
+    private var wallTabBar: some View {
+        HStack(spacing: 0) {
+            tabButton(.wall, title: user.isMe ? "📝 Tường của bạn" : "📝 Tường")
+            tabButton(.skills, title: "📊 Kỹ năng")
+        }
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Color(.separator)).frame(height: 0.5)
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private func tabButton(_ value: WallTab, title: String) -> some View {
+        let selected = tab == value
+        return Button {
+            guard tab != value else { return }
+            UISelectionFeedbackGenerator().selectionChanged()
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { tab = value }
+            WallTab.last = value
+        } label: {
+            VStack(spacing: 8) {
+                Text(title)
+                    .font(.subheadline.weight(selected ? .bold : .semibold))
+                    .foregroundStyle(selected ? Color.primary : Color.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                ZStack {
+                    Capsule().fill(Color.clear).frame(height: 3)
+                    if selected {
+                        Capsule()
+                            .fill(socialRed)
+                            .frame(height: 3)
+                            .matchedGeometryEffect(id: "underline", in: tabUnderline)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+    }
+
+    /// Tường: bài đăng, tình huống gần đây, phòng chat đã tạo.
+    @ViewBuilder
+    private var wallTabContent: some View {
+        // Lazy: bài đăng tải thêm khi cuộn tới cuối.
+        LazyVStack(spacing: 18) {
+            VStack(alignment: .leading, spacing: 10) {
+                sectionTitle("Bài đăng")
+                if user.isMe {
+                    FeedComposerCard(me: user) { post in
+                        postsFeed.insert(post)
+                    }
+                }
+            }
+            FeedPostsList(feed: postsFeed, emptyText: user.isMe ? "Bạn chưa đăng bài nào." : "\(user.name) chưa đăng bài nào.")
+            if !user.recentTopics.isEmpty { topicsCard }
+            if !user.rooms.isEmpty { roomsCard }
+        }
+    }
+
+    /// Kỹ năng: thống kê, huân chương, tiến bộ, lịch 5 tuần, thành tích.
+    @ViewBuilder
+    private var skillsTabContent: some View {
+        VStack(spacing: 18) {
+            if !loaded {
+                ProgressView().padding(.top, 8)
+            }
+            statsGrid
+            WallMedalsCard(medals: user.medals, awards: user.awards)
+            WallProgressSection(userID: user.id, isMe: user.isMe, name: user.name) { word in
+                selectedWord = SelectedWord(word: word)
+            }
+            if !user.calendar.isEmpty { calendarCard }
+            if !user.badges.isEmpty { badgesCard }
         }
     }
 
