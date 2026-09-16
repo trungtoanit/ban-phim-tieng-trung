@@ -464,7 +464,6 @@ struct ConversationTopicsView: View {
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
                             .fill(brandRed)
-                            .shadow(color: Color(red: 0.72, green: 0.14, blue: 0.11), radius: 0, y: 4)
                     )
                     .opacity(isEmpty || creatingOnWeb ? 0.55 : 1)
             }
@@ -488,12 +487,7 @@ struct ConversationTopicsView: View {
                             .foregroundStyle(.primary)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 9)
-                            .background(
-                                Capsule()
-                                    .fill(Color(.systemBackground))
-                                    .shadow(color: Color(.separator), radius: 0, y: 2)
-                            )
-                            .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 2))
+                            .background(Capsule().fill(Color(.tertiarySystemFill)))
                     }
                     .buttonStyle(.plain)
                 }
@@ -896,12 +890,13 @@ struct ConversationView: View {
                 session.resume()
             } label: {
                 Label("Nói tiếp — đã đi được \(session.savedTurns) lượt", systemImage: "mic.fill")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.headline)
+                    .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 15)
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(brandRed))
             }
-            .buttonStyle(.borderedProminent)
-            .tint(brandRed)
+            .buttonStyle(.plain)
 
             Button("Bỏ đoạn này, nói lại từ đầu") {
                 confirmRestart = true
@@ -987,88 +982,65 @@ struct ConversationView: View {
     private func unitCard(_ unit: WebConversationAPI.Conversation) -> some View {
         let done = min(unit.userTurns, unit.target)
         let progress = min(1, CGFloat(unit.userTurns) / CGFloat(max(unit.target, 1)))
-        return VStack(alignment: .leading, spacing: 10) {
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 12) {
                 Text(unit.emoji)
-                    .font(.system(size: 30))
-                    .frame(width: 52, height: 52)
-                    .background(Circle().fill(.white.opacity(0.18)))
+                    .font(.system(size: 26))
+                    .frame(width: 46, height: 46)
+                    .background(RoundedRectangle(cornerRadius: 13, style: .continuous).fill(.white.opacity(0.2)))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(unit.userTurns >= unit.target ? "TÌNH HUỐNG · HOÀN THÀNH 🎉" : "TÌNH HUỐNG")
-                        .font(.caption2.weight(.heavy))
-                        .kerning(0.8)
-                        .opacity(0.85)
                     Text(unit.title)
-                        .font(.title3.weight(.heavy))
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.85)
-                    if !unit.caption.isEmpty {
-                        Text(unit.caption)
-                            .font(.footnote)
-                            .opacity(0.9)
-                            .lineLimit(2)
-                    }
+                        .font(.headline.weight(.bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                    Text(unit.caption.isEmpty ? "Tình huống luyện nói" : unit.caption)
+                        .font(.subheadline)
+                        .opacity(0.85)
+                        .lineLimit(1)
                 }
                 Spacer(minLength: 0)
+                if unit.userTurns >= unit.target {
+                    Image(systemName: "checkmark.seal.fill").font(.title3)
+                }
             }
             HStack(spacing: 10) {
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(.white.opacity(0.28))
+                        Capsule().fill(.white.opacity(0.25))
                         Capsule().fill(.white)
-                            .frame(width: max(8, geo.size.width * progress))
+                            .frame(width: max(6, geo.size.width * progress))
                     }
                 }
-                .frame(height: 8)
-                Text("\(done)/\(unit.target) câu")
-                    .font(.caption.weight(.heavy))
+                .frame(height: 6)
+                Text("\(done)/\(unit.target)")
+                    .font(.footnote.weight(.semibold))
                     .monospacedDigit()
                     .contentTransition(.numericText())
             }
         }
         .foregroundStyle(.white)
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(LinearGradient(colors: [brandRed, Color(red: 0.93, green: 0.33, blue: 0.2)],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
-                .shadow(color: Color(red: 0.72, green: 0.14, blue: 0.11), radius: 0, y: 4)
-        )
-        .padding(.bottom, 2)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(brandRed))
     }
 
-    /// Vai của bạn / AI và gợi ý cách nói, gọn trong 1 dòng chip (thay cho khối chữ giữa màn).
+    /// Vai của bạn / AI và gợi ý cách nói: 1–2 dòng chữ nhỏ, phẳng.
     private var chatHint: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                roleChip("🙋", "Bạn", session.scenario.userRole)
-                roleChip(session.scenario.partnerEmoji, "AI", session.scenario.partnerRole)
-            }
+        let cap = { (text: String) in text.prefix(1).uppercased() + text.dropFirst() }
+        return VStack(spacing: 4) {
+            Text("Bạn: \(cap(session.scenario.userRole)) · AI: \(cap(session.scenario.partnerRole))")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
             if !session.needsResumeChoice {
                 Label(session.handsFree ? "Rảnh tay: AI nói xong là micro tự mở" : "Bấm micro rồi nói tiếng Trung",
-                      systemImage: session.handsFree ? "infinity" : "mic.fill")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
+                      systemImage: session.handsFree ? "infinity" : "mic")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.bottom, 2)
-    }
-
-    private func roleChip(_ emoji: String, _ label: String, _ role: String) -> some View {
-        HStack(spacing: 6) {
-            Text(emoji).font(.system(size: 15))
-            Text(label).font(.caption.weight(.heavy)).foregroundStyle(brandRed)
-            Text(role.prefix(1).uppercased() + role.dropFirst())
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Capsule().fill(Color(.secondarySystemGroupedBackground)))
-        .overlay(Capsule().strokeBorder(Color(.separator).opacity(0.6), lineWidth: 1))
+        .padding(.vertical, 2)
     }
 
     /// Badge chấm câu nói giống web: 🎯 % đọc đúng, ⚡ chữ/phút.
@@ -1124,9 +1096,8 @@ struct ConversationView: View {
             HStack(alignment: .top, spacing: 8) {
                 Text(session.scenario.partnerEmoji)
                     .font(.system(size: 20))
-                    .frame(width: 36, height: 36)
+                    .frame(width: 34, height: 34)
                     .background(Circle().fill(Color(.secondarySystemGroupedBackground)))
-                    .overlay(Circle().strokeBorder(Color(.separator).opacity(0.5), lineWidth: 1))
                 VStack(alignment: .leading, spacing: 6) {
                     ruby(message.line, size: 19)
                     HStack(alignment: .top) {
@@ -1143,9 +1114,8 @@ struct ConversationView: View {
                     }
                 }
                 .padding(12)
-                .background(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color(.secondarySystemGroupedBackground))
-                    .shadow(color: .black.opacity(0.06), radius: 6, y: 2))
+                .background(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color(.secondarySystemGroupedBackground)))
                 Spacer(minLength: 24)
             }
         case .user:
@@ -1271,14 +1241,9 @@ struct ConversationView: View {
                             .padding(.horizontal, 12)
                             .padding(.vertical, 9)
                             .frame(maxWidth: 260, alignment: .leading)
-                            // Bong do chi cho khung the (dat tren chu se lam chu bi nhoe)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(Color(.systemBackground))
-                                    .shadow(color: Color(.separator), radius: 0, y: 2)
-                            )
-                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(Color(.separator), lineWidth: 2))
+                            // Giao dien phang: nen nhat, khong vien day / bong 3D
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color(.tertiarySystemFill)))
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Gợi ý: \(hint.zh), \(hint.vi)")
