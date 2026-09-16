@@ -10,7 +10,8 @@ struct RubyText: View {
     let words: [PinyinWord]
     var hanziSize: CGFloat = 20
     var hanziWeight: Font.Weight = .medium
-    var pinyinColor: Color = .secondary
+    /// Pinyin xanh duong giong trang web (#1899d6; sang hon o che do toi).
+    var pinyinColor: Color = RubyText.pinyinBlue
     /// Màu chữ Hán khi từ không bị đánh dấu — đổi được để dùng ở dải "đang nghe".
     var hanziColor: Color = .primary
     var showHanViet = SharedSettings.showHanViet
@@ -20,6 +21,11 @@ struct RubyText: View {
     /// Chạm vào một từ (nghe phát âm, xem nghĩa).
     var onTapWord: ((PinyinWord) -> Void)?
 
+    static let pinyinBlue = Color(uiColor: UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(red: 0.35, green: 0.72, blue: 0.98, alpha: 1)
+            : UIColor(red: 0.09, green: 0.60, blue: 0.84, alpha: 1)
+    })
     private let flaggedColor = Color.red
     /// Xanh lá đậm trên nền sáng, nhạt hơn trên nền tối cho đủ tương phản.
     private let correctColor = Color(uiColor: UIColor { trait in

@@ -1609,7 +1609,7 @@ struct RoomChatView: View {
                     selectedWord = SelectedWord(word: $0)
                 }
             } else if let words = model.words(for: message) {
-                RubyText(words: words, hanziSize: 19, pinyinColor: .blue, showHanViet: showHanViet) {
+                RubyText(words: words, hanziSize: 19, pinyinColor: RubyText.pinyinBlue, showHanViet: showHanViet) {
                     selectedWord = SelectedWord(word: $0)
                 }
             } else {
@@ -2267,7 +2267,7 @@ private struct RoomComposer: View {
     @ViewBuilder
     private func chineseText(_ text: String) -> some View {
         if ChineseText.containsHan(text) {
-            RubyText(words: ChineseText.words(for: text), hanziSize: 19, pinyinColor: .blue, showHanViet: showHanViet)
+            RubyText(words: ChineseText.words(for: text), hanziSize: 19, pinyinColor: RubyText.pinyinBlue, showHanViet: showHanViet)
         } else {
             Text(text).font(.body)
         }
@@ -2280,7 +2280,7 @@ private struct RoomComposer: View {
         let tooLong = draft.count > RoomChatModel.maxLength
         return VStack(spacing: 4) {
             if ChineseText.containsHan(trimmed) {
-                RubyText(words: ChineseText.words(for: trimmed), hanziSize: 16, pinyinColor: .blue, showHanViet: showHanViet)
+                RubyText(words: ChineseText.words(for: trimmed), hanziSize: 16, pinyinColor: RubyText.pinyinBlue, showHanViet: showHanViet)
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))

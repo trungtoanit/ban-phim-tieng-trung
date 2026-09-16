@@ -87,7 +87,7 @@ struct LinkedRichText: View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                 if ruby, ChineseText.containsHan(line), !SocialLinks.containsLink(line) {
-                    RubyText(words: ChineseText.words(for: line), hanziSize: hanziSize, pinyinColor: .blue,
+                    RubyText(words: ChineseText.words(for: line), hanziSize: hanziSize, pinyinColor: RubyText.pinyinBlue,
                              showHanViet: showHanViet, onTapWord: onTapWord)
                 } else if !line.isEmpty {
                     Text(SocialLinks.attributed(line))
@@ -663,7 +663,7 @@ struct PostCard: View {
             // Có link: dòng có link hiện chữ thường bấm được, dòng tiếng Trung khác vẫn có pinyin.
             LinkedRichText(text: post.text, hanziSize: 18, showHanViet: showHanViet, ruby: post.text.count <= 400)
         } else if ChineseText.containsHan(post.text), post.text.count <= 200, !post.text.contains("\n") {
-            RubyText(words: ChineseText.words(for: post.text), hanziSize: 18, pinyinColor: .blue, showHanViet: showHanViet)
+            RubyText(words: ChineseText.words(for: post.text), hanziSize: 18, pinyinColor: RubyText.pinyinBlue, showHanViet: showHanViet)
         } else {
             Text(post.text)
                 .font(.body)
