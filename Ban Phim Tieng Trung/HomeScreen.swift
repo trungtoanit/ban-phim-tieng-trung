@@ -592,16 +592,23 @@ private struct SoundBars: View {
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1 / 20, paused: reduceMotion)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
+            let time = timeline.date.timeIntervalSinceReferenceDate
             HStack(alignment: .center, spacing: 3) {
                 ForEach(0..<4, id: \.self) { bar in
-                    let wave = (sin(t * (5 + Double(bar) * 1.3) + Double(bar)) + 1) / 2
                     Capsule()
                         .fill(.white)
-                        .frame(width: 3, height: 4 + 12 * CGFloat(reduceMotion ? 0.5 : wave))
+                        .frame(width: 3, height: height(bar: bar, time: time))
                 }
             }
         }
+    }
+
+    /// Tách khỏi `body`: để cả phép tính trong view thì trình biên dịch suy kiểu rất lâu.
+    private func height(bar: Int, time: TimeInterval) -> CGFloat {
+        guard !reduceMotion else { return 10 }
+        let speed: Double = 5 + Double(bar) * 1.3
+        let wave: Double = (sin(time * speed + Double(bar)) + 1) / 2
+        return 4 + 12 * CGFloat(wave)
     }
 }
 
