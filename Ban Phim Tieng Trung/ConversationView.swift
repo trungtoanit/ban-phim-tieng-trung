@@ -118,6 +118,7 @@ struct ConversationTopicsView: View {
 
                 if !web.isSignedIn {
                     Section {
+                        PasswordLoginForm()
                         GoogleSignInButton()
                         if let error = web.errorMessage {
                             Text(error).font(.caption).foregroundStyle(.red)
@@ -130,7 +131,7 @@ struct ConversationTopicsView: View {
                             }
                         }
                     } footer: {
-                        Text("Đăng nhập Google cùng Gmail với trang học trên website để dùng chung tình huống, lời thoại và AI của máy chủ — không cần khoá OpenAI.")
+                        Text("Đăng nhập (hoặc đăng ký) cùng tài khoản với trang học trên website để dùng chung tình huống, lời thoại và AI của máy chủ — không cần khoá OpenAI.")
                     }
                 }
 

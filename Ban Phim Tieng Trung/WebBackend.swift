@@ -47,6 +47,7 @@ struct WebBackendError: LocalizedError {
 struct WebUser: Codable, Equatable {
     let id: Int
     let email: String
+    var username: String? = nil
     let name: String
     let avatar: String?
 }
@@ -105,6 +106,35 @@ final class WebAccountStore: NSObject, ObservableObject {
             }
         }
     }
+
+    /// Đăng nhập bằng tên đăng nhập + mật khẩu (tài khoản dùng chung với website).
+    func signIn(username: String, password: String) {
+        passwordAuth(["action": "login", "username": username, "password": password])
+    }
+
+    /// Tạo tài khoản mới rồi đăng nhập luôn.
+    func register(username: String, password: String, name: String) {
+        passwordAuth(["action": "register", "username": username, "password": password, "name": name])
+    }
+
+    private func passwordAuth(_ payload: [String: String]) {
+        guard !isSigningIn else { return }
+        isSigningIn = true
+        errorMessage = nil
+        Task {
+            do {
+                let (token, user) = try await Self.authRequest(payload)
+                await MainActor.run { self.save(token: token, user: user) }
+            } catch {
+                await MainActor.run {
+                    self.isSigningIn = false
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
+    func clearError() { errorMessage = nil }
 
     private func signInDev(secret: String) {
         isSigningIn = true
@@ -243,7 +273,12 @@ final class WebAccountStore: NSObject, ObservableObject {
         var body = payload
         body["device"] = await MainActor.run { UIDevice.current.model }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let data: Data
+        do {
+            (data, _) = try await URLSession.shared.data(for: request)
+        } catch {
+            throw WebBackendError(message: "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.")
+        }
         guard let response = try? JSONDecoder().decode(Response.self, from: data) else {
             throw WebBackendError(message: "Máy chủ trả về dữ liệu lỗi. Hãy thử lại sau.")
         }
@@ -484,11 +519,12 @@ struct WebAccountSection: View {
                         .foregroundStyle(.blue)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(user.name).font(.subheadline.weight(.semibold))
-                        Text(user.email).font(.caption).foregroundStyle(.secondary)
+                        Text(user.email.isEmpty ? "@\(user.username ?? "")" : user.email).font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 Button("Đăng xuất khỏi website", role: .destructive) { web.signOut() }
             } else {
+                PasswordLoginForm()
                 GoogleSignInButton()
             }
             if let error = web.errorMessage {
@@ -497,7 +533,7 @@ struct WebAccountSection: View {
         } header: {
             Text("Website tiengtrung.tuantu.com.vn")
         } footer: {
-            Text("Đăng nhập cùng Gmail với trang học trên web để dùng chung tình huống và lời thoại Hội thoại AI. AI do máy chủ trả lời, không cần khoá OpenAI riêng.")
+            Text("Đăng nhập cùng tài khoản với trang học trên web để dùng chung tình huống và lời thoại Hội thoại AI. AI do máy chủ trả lời, không cần khoá OpenAI riêng.")
         }
     }
 }
@@ -566,7 +602,7 @@ struct WebLoginView: View {
                         Text("Chào mừng đến\nBàn Phím Trung")
                             .font(.system(size: 30, weight: .heavy, design: .rounded))
                             .multilineTextAlignment(.center)
-                        Text("Đăng nhập bằng Gmail để luyện nói tiếng Trung cùng AI.")
+                        Text("Đăng nhập hoặc tạo tài khoản để luyện nói tiếng Trung cùng AI.")
                             .font(.callout)
                             .multilineTextAlignment(.center)
                             .opacity(0.9)
@@ -595,6 +631,17 @@ struct WebLoginView: View {
                     .opacity(appeared ? 1 : 0)
 
                     VStack(spacing: 12) {
+                        VStack(spacing: 14) {
+                            PasswordLoginForm(compact: false)
+                            HStack(spacing: 10) {
+                                Rectangle().fill(Color(.separator)).frame(height: 1)
+                                Text("hoặc").font(.footnote).foregroundStyle(.secondary)
+                                Rectangle().fill(Color(.separator)).frame(height: 1)
+                            }
+                        }
+                        .padding(18)
+                        .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Color(.systemBackground)))
+
                         Button {
                             web.signInWithGoogle()
                         } label: {
@@ -631,7 +678,7 @@ struct WebLoginView: View {
                             .padding(.vertical, 6)
                     }
 
-                    Text("App chỉ nhận tên, email và ảnh đại diện Google để tạo tài khoản, dùng chung với website. Không lưu mật khẩu của bạn.")
+                    Text("Tài khoản dùng chung với website. Mật khẩu được mã hoá một chiều trên máy chủ; với Google, app chỉ nhận tên, email và ảnh đại diện.")
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.75))
                         .multilineTextAlignment(.center)
@@ -676,5 +723,123 @@ struct GoogleLogo: View {
             .rotation(.degrees(start))
             .stroke(color, style: StrokeStyle(lineWidth: line, lineCap: .butt))
             .padding(line / 2)
+    }
+}
+
+// MARK: - Đăng nhập / đăng ký bằng tên đăng nhập + mật khẩu
+
+struct PasswordLoginForm: View {
+    /// Nền tối (màn đăng nhập đỏ) thì chữ phụ màu trắng.
+    var compact = true
+
+    @ObservedObject private var web = WebAccountStore.shared
+    @State private var registering = false
+    @State private var name = ""
+    @State private var username = ""
+    @State private var password = ""
+    @State private var localError: String?
+    @FocusState private var focus: Field?
+
+    private enum Field { case name, username, password }
+    private let brandRed = Color(red: 0.86, green: 0.17, blue: 0.16)
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Picker("", selection: $registering.animation(.easeInOut(duration: 0.2))) {
+                Text("Đăng nhập").tag(false)
+                Text("Đăng ký").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: registering) { _ in
+                localError = nil
+                web.clearError()
+            }
+
+            if registering {
+                field("Tên hiển thị (vd: Minh Anh)", text: $name, icon: "person")
+                    .textContentType(.name)
+                    .focused($focus, equals: .name)
+                    .submitLabel(.next)
+                    .onSubmit { focus = .username }
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+            field("Tên đăng nhập", text: $username, icon: "at")
+                .textContentType(.username)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .keyboardType(.asciiCapable)
+                .focused($focus, equals: .username)
+                .submitLabel(.next)
+                .onSubmit { focus = .password }
+
+            HStack(spacing: 10) {
+                Image(systemName: "lock").foregroundStyle(.secondary).frame(width: 20)
+                SecureField("Mật khẩu (ít nhất 8 ký tự)", text: $password)
+                    .textContentType(registering ? .newPassword : .password)
+                    .focused($focus, equals: .password)
+                    .submitLabel(.go)
+                    .onSubmit(submit)
+            }
+            .modifier(FieldBox())
+
+            if let localError {
+                Text(localError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Button(action: submit) {
+                HStack(spacing: 8) {
+                    if web.isSigningIn { ProgressView().tint(.white) }
+                    Text(web.isSigningIn ? (registering ? "Đang tạo tài khoản…" : "Đang đăng nhập…")
+                                         : (registering ? "Tạo tài khoản" : "Đăng nhập"))
+                        .font(.headline)
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(brandRed))
+            }
+            .buttonStyle(.plain)
+            .disabled(web.isSigningIn)
+        }
+        .padding(.vertical, compact ? 4 : 0)
+    }
+
+    private func field(_ placeholder: String, text: Binding<String>, icon: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon).foregroundStyle(.secondary).frame(width: 20)
+            TextField(placeholder, text: text)
+        }
+        .modifier(FieldBox())
+    }
+
+    private func submit() {
+        let user = username.trimmingCharacters(in: .whitespaces).lowercased()
+        localError = nil
+        guard user.range(of: "^[a-z0-9][a-z0-9_.]{2,31}$", options: .regularExpression) != nil else {
+            localError = "Tên đăng nhập 3–32 ký tự, chỉ gồm chữ thường không dấu, số, dấu chấm hoặc gạch dưới."
+            return
+        }
+        guard password.count >= 8 else {
+            localError = "Mật khẩu cần ít nhất 8 ký tự."
+            return
+        }
+        focus = nil
+        if registering {
+            web.register(username: user, password: password, name: name.trimmingCharacters(in: .whitespaces))
+        } else {
+            web.signIn(username: user, password: password)
+        }
+    }
+}
+
+private struct FieldBox: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemBackground)))
     }
 }
