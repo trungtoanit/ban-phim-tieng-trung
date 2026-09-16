@@ -2558,21 +2558,38 @@ private struct SystemMessagePill: View {
         _visible = State(initialValue: !recent)
     }
 
+    /// join / enter: viên xanh; leave và loại chưa biết: viên xám.
+    private var isGreen: Bool { system.type == "join" || system.type == "enter" }
+
+    private var icon: String? {
+        switch system.type {
+        case "join": return "👋"
+        case "enter": return "🟢"
+        case "leave": return "🚪"
+        default: return nil
+        }
+    }
+
     private var action: String {
         if !system.text.isEmpty { return system.text }
         if !message.text.isEmpty { return message.text }
-        return system.isJoin ? "đã tham gia phòng" : "đã rời phòng"
+        switch system.type {
+        case "join": return "đã tham gia phòng"
+        case "leave": return "đã rời phòng"
+        case "enter": return "đã vào phòng"
+        default: return ""
+        }
     }
 
     var body: some View {
         let name = message.mine ? "Bạn" : message.user.name
         let time = SocialFormat.time(message.createdAt)
         HStack(spacing: 4) {
-            Text(system.isJoin ? "👋" : "🚪")
+            if let icon { Text(icon) }
             NavigationLink(value: message.user.socialUser()) {
                 Text(name)
                     .fontWeight(.semibold)
-                    .foregroundStyle(system.isJoin ? Color(red: 0.1, green: 0.5, blue: 0.22) : Color.primary)
+                    .foregroundStyle(isGreen ? Color(red: 0.1, green: 0.5, blue: 0.22) : Color.primary)
                     .lineLimit(1)
             }
             .buttonStyle(.plain)
@@ -2589,7 +2606,7 @@ private struct SystemMessagePill: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 5)
         .background(
-            Capsule().fill(system.isJoin ? onlineGreen.opacity(0.14) : Color(.tertiarySystemFill))
+            Capsule().fill(isGreen ? onlineGreen.opacity(0.14) : Color(.tertiarySystemFill))
         )
         .frame(maxWidth: .infinity)
         .opacity(visible ? 1 : 0)
