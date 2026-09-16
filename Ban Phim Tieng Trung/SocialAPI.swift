@@ -462,6 +462,8 @@ struct RoomPage {
     let hasMore: Bool
     /// Những người đang trong phòng (người xem đứng đầu). nil nếu máy chủ chưa hỗ trợ.
     let online: [RoomMessage.User]?
+    /// Người khác đang gõ (trong 5 giây qua). nil nếu máy chủ chưa hỗ trợ.
+    var typing: [RoomMessage.User]? = nil
 }
 
 /// Số người đang trong phòng chat: tổng (không trùng) và theo từng phòng.
@@ -491,6 +493,7 @@ enum SocialAPI {
         let hasMore: Bool?
         let message: RoomMessage?
         let online: [RoomMessage.User]?
+        let typing: [RoomMessage.User]?
         // Dịch
         let zh: String?
         // Bảng tin
@@ -559,7 +562,8 @@ enum SocialAPI {
         if before > 0 { params["before"] = before }
         let e = try await call("room", params, method: "GET")
         guard let room = e.room else { throw missing }
-        return RoomPage(room: room, messages: e.messages ?? [], deletedIds: e.deletedIds ?? [], hasMore: e.hasMore ?? false, online: e.online)
+        return RoomPage(room: room, messages: e.messages ?? [], deletedIds: e.deletedIds ?? [], hasMore: e.hasMore ?? false, online: e.online,
+                        typing: e.typing)
     }
 
     /// Tổng số người đang trong phòng chat (mọi phòng).
@@ -571,6 +575,11 @@ enum SocialAPI {
             if let id = Int(key) { rooms[id] = value }
         }
         return RoomsOnline(total: e?.total ?? 0, rooms: rooms)
+    }
+
+    /// Báo đang gõ / thôi gõ (không cần đợi kết quả).
+    static func roomTyping(id: Int, typing: Bool) async {
+        _ = try? await request("room_typing", ["id": id, "typing": typing])
     }
 
     /// Rời màn phòng: bỏ trạng thái đang online ngay thay vì đợi 20 giây.

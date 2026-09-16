@@ -240,7 +240,7 @@ private struct RoomRow: View {
     private var preview: String {
         if let last = room.lastMessage {
             // Tin cuối chỉ có ảnh (chữ rỗng).
-            return last.isEmpty ? "📷 Ảnh" : last
+            return last.isEmpty ? "📷 Ảnh / 🎁 Quà tặng" : last
         }
         return room.description.isEmpty ? "Chưa có tin nhắn" : room.description
     }
@@ -289,6 +289,7 @@ private struct RoomMemberStack: View {
 
 struct RoomMembersRoute: Hashable {
     let room: ChatRoom
+    var typingIDs: Set<Int> = []
 }
 
 extension View {
@@ -300,7 +301,7 @@ extension View {
                 RoomChatView(room: ChatRoom(placeholder: wallRoom), onUpdate: onUpdate, onDeleted: { onDeleted(wallRoom.id) })
             }
             .navigationDestination(for: RoomMembersRoute.self) { route in
-                RoomMembersView(room: route.room)
+                RoomMembersView(room: route.room, typingIDs: route.typingIDs)
             }
     }
 }
@@ -308,9 +309,11 @@ extension View {
 /// Toàn bộ thành viên phòng: chủ phòng 👑 đầu tiên, người đang online có chấm xanh. Chạm để xem tường.
 struct RoomMembersView: View {
     @State private var room: ChatRoom
+    let typingIDs: Set<Int>
 
-    init(room: ChatRoom) {
+    init(room: ChatRoom, typingIDs: Set<Int> = []) {
         _room = State(initialValue: room)
+        self.typingIDs = typingIDs
     }
 
     private var members: [RoomMember] {
@@ -347,7 +350,11 @@ struct RoomMembersView: View {
                                             .padding(.vertical, 2)
                                             .background(Capsule().fill(socialRed.opacity(0.12)))
                                     }
-                                    if member.online {
+                                    if typingIDs.contains(member.id) {
+                                        Text("đang gõ…")
+                                            .font(.caption.italic())
+                                            .foregroundStyle(onlineGreen)
+                                    } else if member.online {
                                         Text("đang online")
                                             .font(.caption)
                                             .foregroundStyle(onlineGreen)
@@ -371,6 +378,7 @@ struct RoomMembersView: View {
                     Text("Đang hiện \(members.count)/\(room.memberCount) thành viên.")
                 }
             }
+            GiftTopSection(roomID: room.id)
         }
         .listStyle(.insetGrouped)
         .navigationTitle("\(room.emoji) \(room.name)")
@@ -553,11 +561,61 @@ final class RoomChatModel: ObservableObject {
         return words
     }
 
+    // MARK: Quà
+
+    /// Quà mới đến (mình vừa tặng, hoặc người khác tặng khi đang mở phòng) → phát hiệu ứng.
+    let giftArrived = PassthroughSubject<RoomMessage, Never>()
+    private var giftEffectShown = Set<Int>()
+
+    private func announceGifts(_ fresh: [RoomMessage]) {
+        for message in fresh where message.gift != nil && !giftEffectShown.contains(message.id) {
+            giftEffectShown.insert(message.id)
+            giftArrived.send(message)
+        }
+    }
+
+    /// Mình vừa tặng quà: thêm vào danh sách và phát hiệu ứng ngay.
+    func receiveSentGift(_ message: RoomMessage) {
+        let fresh = merge([message])
+        announceGifts(fresh)
+        if !room.joined {
+            room.joined = true
+            room.memberCount += 1
+        }
+        room.lastMessageAt = message.createdAt
+    }
+
+    // MARK: Đang gõ
+
+    /// Những người khác đang gõ.
+    @Published var typing: [RoomMessage.User] = []
+    var typingIDs: Set<Int> { Set(typing.map(\.id)) }
+    private var lastTypingSent: Date?
+
+    /// Gọi khi ô gõ có chữ và đang thay đổi: báo máy chủ tối đa 2,5 giây một lần.
+    func userIsTyping() {
+        if let last = lastTypingSent, Date().timeIntervalSince(last) < 2.5 { return }
+        lastTypingSent = Date()
+        let id = room.id
+        Task { await SocialAPI.roomTyping(id: id, typing: true) }
+    }
+
+    /// Ô gõ trống / rời màn hình: báo thôi gõ (chỉ khi trước đó đã báo đang gõ).
+    func userStoppedTyping() {
+        guard lastTypingSent != nil else { return }
+        lastTypingSent = nil
+        let id = room.id
+        Task { await SocialAPI.roomTyping(id: id, typing: false) }
+    }
+
     func load() async {
         do {
             let page = try await SocialAPI.room(id: room.id)
             room = page.room
             if let people = page.online { online = people }
+            if let people = page.typing { typing = people }
+            // Quà trong lịch sử không phát hiệu ứng.
+            giftEffectShown.formUnion(page.messages.filter { $0.gift != nil }.map(\.id))
             messages = page.messages
             hasMore = page.hasMore
             loaded = true
@@ -578,7 +636,8 @@ final class RoomChatModel: ObservableObject {
             let page = try await SocialAPI.room(id: room.id, after: messages.last?.id ?? 0)
             room = page.room
             if let people = page.online, people != online { online = people }
-            merge(page.messages)
+            if let people = page.typing, people != typing { typing = people }
+            announceGifts(merge(page.messages))
             if !page.deletedIds.isEmpty {
                 let deleted = Set(page.deletedIds)
                 if messages.contains(where: { deleted.contains($0.id) }) {
@@ -610,6 +669,7 @@ final class RoomChatModel: ObservableObject {
         do {
             let page = try await SocialAPI.room(id: room.id, before: first.id)
             let known = Set(messages.map(\.id))
+            giftEffectShown.formUnion(page.messages.filter { $0.gift != nil }.map(\.id))
             messages.insert(contentsOf: page.messages.filter { !known.contains($0.id) }, at: 0)
             hasMore = page.hasMore
         } catch is CancellationError {
@@ -635,6 +695,7 @@ final class RoomChatModel: ObservableObject {
         do {
             let message = try await SocialAPI.send(roomId: room.id, text: text, replyTo: replyID)
             clearReply(replyID)
+            lastTypingSent = nil
             merge([message])
             if !room.joined {
                 room.joined = true
@@ -720,12 +781,15 @@ final class RoomChatModel: ObservableObject {
         }
     }
 
-    private func merge(_ incoming: [RoomMessage]) {
+    /// Thêm tin mới; trả về những tin thật sự mới.
+    @discardableResult
+    private func merge(_ incoming: [RoomMessage]) -> [RoomMessage] {
         let known = Set(messages.map(\.id))
         let fresh = incoming.filter { !known.contains($0.id) }
-        guard !fresh.isEmpty else { return }
+        guard !fresh.isEmpty else { return [] }
         messages.append(contentsOf: fresh)
         messages.sort { $0.id < $1.id }
+        return fresh
     }
 }
 
@@ -741,6 +805,8 @@ struct RoomChatView: View {
     @State private var confirmDelete = false
     @State private var selectedWord: SelectedWord?
     @State private var viewingImage: SocialImage?
+    /// Hiệu ứng quà. @State (không theo dõi) để phát hiệu ứng không vẽ lại danh sách tin.
+    @State private var giftCenter = GiftEffectCenter()
     /// Tin cần cuộn tới (bấm vào trích dẫn) và tin đang được tô sáng.
     @State private var scrollTarget: Int?
     @State private var highlightedID: Int?
@@ -804,6 +870,11 @@ struct RoomChatView: View {
 
                     ForEach(model.uploads) { upload in
                         uploadBubble(upload)
+                    }
+
+                    if !model.typing.isEmpty {
+                        TypingIndicator(users: model.typing)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
                     }
 
                     Color.clear.frame(height: 1).id(Self.bottomID)
@@ -882,6 +953,9 @@ struct RoomChatView: View {
                 await model.poll()
             }
         }
+        .overlay { GiftEffectsOverlay(center: giftCenter) }
+        .onReceive(model.giftArrived) { giftCenter.enqueue($0) }
+        .animation(.easeInOut(duration: 0.2), value: model.typing.map(\.id))
         .onAppear {
             voice.activate { [model] text in await model.send(text) }
             voice.onError = { [model] message in model.errorMessage = message }
@@ -889,6 +963,8 @@ struct RoomChatView: View {
         // Rời màn phòng thì báo máy chủ bỏ trạng thái đang online (không cần đợi kết quả), tắt micro / rảnh tay.
         .onDisappear {
             voice.deactivate()
+            giftCenter.stop()
+            model.userStoppedTyping()
             let id = model.room.id
             Task { try? await SocialAPI.roomAway(id: id) }
         }
@@ -927,7 +1003,7 @@ struct RoomChatView: View {
 
     /// Chạm vào tiêu đề để xem toàn bộ thành viên.
     private var header: some View {
-        NavigationLink(value: RoomMembersRoute(room: model.room)) {
+        NavigationLink(value: RoomMembersRoute(room: model.room, typingIDs: model.typingIDs)) {
             HStack(spacing: 8) {
                 Text(model.room.emoji).font(.title3)
                 VStack(alignment: .leading, spacing: 0) {
@@ -969,7 +1045,7 @@ struct RoomChatView: View {
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 8)
-                    NavigationLink(value: RoomMembersRoute(room: model.room)) {
+                    NavigationLink(value: RoomMembersRoute(room: model.room, typingIDs: model.typingIDs)) {
                         HStack(spacing: 3) {
                             Text("Thành viên (\(model.room.memberCount))")
                             Image(systemName: "chevron.right")
@@ -990,6 +1066,16 @@ struct RoomChatView: View {
                                             .overlay(alignment: .top) {
                                                 if user.id == model.room.ownerId {
                                                     Text("👑").font(.system(size: 12)).offset(y: -9)
+                                                }
+                                            }
+                                            .overlay(alignment: .topTrailing) {
+                                                if model.typingIDs.contains(user.id) {
+                                                    TypingDots(dotSize: 3.5)
+                                                        .padding(.horizontal, 4)
+                                                        .padding(.vertical, 3)
+                                                        .background(Capsule().fill(Color(.systemBackground)))
+                                                        .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 0.5))
+                                                        .offset(x: 8, y: -4)
                                                 }
                                             }
                                         Text(index == 0 ? "Bạn" : user.name)
@@ -1131,6 +1217,26 @@ struct RoomChatView: View {
 
     @ViewBuilder
     private func bubble(_ message: RoomMessage, online: Bool) -> some View {
+        if let gift = message.gift {
+            GiftMessagePill(message: message, gift: gift) {
+                giftCenter.enqueue(message)
+            }
+            .contextMenu {
+                if message.mine || model.room.isOwner {
+                    Button(role: .destructive) {
+                        Task { await model.delete(message) }
+                    } label: {
+                        Label("Xoá", systemImage: "trash")
+                    }
+                }
+            }
+        } else {
+            messageBubble(message, online: online)
+        }
+    }
+
+    @ViewBuilder
+    private func messageBubble(_ message: RoomMessage, online: Bool) -> some View {
         let canDelete = message.mine || model.room.isOwner
         let isOwner = message.user.id == model.room.ownerId
         let hasHan = ChineseText.containsHan(message.text)
@@ -1571,6 +1677,7 @@ private struct RoomComposer: View {
     @AppStorage("roomChatTextMode") private var textMode = false
     @State private var draft = ""
     @FocusState private var fieldFocused: Bool
+    @State private var showGifts = false
     @State private var choosingPhotoSource = false
     @State private var pickingPhoto = false
     @State private var photoItem: PhotosPickerItem?
@@ -1614,6 +1721,21 @@ private struct RoomComposer: View {
         .animation(.easeInOut(duration: 0.18), value: voice.outgoing)
         .animation(.easeInOut(duration: 0.18), value: voice.pendingVi)
         .onChange(of: fieldFocused) { focused = $0 }
+        .onChange(of: draft) { value in
+            if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                model.userStoppedTyping()
+            } else {
+                model.userIsTyping()
+            }
+        }
+        .onChange(of: voice.transcript) { value in
+            if !value.isEmpty { model.userIsTyping() }
+        }
+        .sheet(isPresented: $showGifts) {
+            GiftSheet(model: model) { message in
+                model.receiveSentGift(message)
+            }
+        }
         .animation(.easeInOut(duration: 0.15), value: model.replyingTo?.id)
         .onChange(of: model.replyingTo?.id) { id in
             if id != nil, textMode { fieldFocused = true }
@@ -1692,6 +1814,21 @@ private struct RoomComposer: View {
         }
     }
 
+    private func giftButton(size: CGFloat) -> some View {
+        Button {
+            voice.stopListening()
+            showGifts = true
+        } label: {
+            Text("🎁")
+                .font(.system(size: size * 0.48))
+                .frame(width: size, height: size)
+                .background(Circle().fill(LinearGradient(colors: [Color(red: 1, green: 0.85, blue: 0.4).opacity(0.5), socialRed.opacity(0.18)],
+                                                         startPoint: .top, endPoint: .bottom)))
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Tặng quà")
+    }
+
     private func photoButton(size: CGFloat) -> some View {
         Button {
             choosePhoto()
@@ -1710,7 +1847,7 @@ private struct RoomComposer: View {
     // MARK: Hàng micro
 
     private var micRow: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Button {
                 voice.stopListening()
                 textMode = true
@@ -1758,7 +1895,8 @@ private struct RoomComposer: View {
             .buttonStyle(.borderless)
             .accessibilityLabel(voice.handsFree ? "Tắt chế độ rảnh tay" : "Bật chế độ rảnh tay")
 
-            photoButton(size: 44)
+            photoButton(size: 40)
+            giftButton(size: 40)
         }
     }
 
@@ -1786,7 +1924,7 @@ private struct RoomComposer: View {
                         .foregroundStyle(.white)
                 }
             }
-            .frame(width: 116, height: 80)
+            .frame(width: 84, height: 80)
         }
         .buttonStyle(.borderless)
         .disabled(busy || voice.isAskingInVietnamese)
@@ -1937,6 +2075,7 @@ private struct RoomComposer: View {
                 .accessibilityLabel("Quay lại nói bằng micro")
 
                 photoButton(size: 38)
+                giftButton(size: 38)
 
                 TextField("Nhắn bằng tiếng Trung…", text: $draft, axis: .vertical)
                     .lineLimit(1...5)
@@ -2064,5 +2203,75 @@ private struct SwipeToReply: ViewModifier {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { offset = 0 }
                     }
             )
+    }
+}
+
+// MARK: - Đang gõ
+
+/// Ba chấm nhấp nháy lần lượt.
+struct TypingDots: View {
+    var dotSize: CGFloat = 6
+    var color: Color = .secondary
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            HStack(spacing: dotSize * 0.6) {
+                ForEach(0..<3, id: \.self) { i in
+                    dot(level: Self.level(time: t, index: i))
+                }
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private static func level(time: Double, index: Int) -> CGFloat {
+        let angle: Double = time * 2 * Double.pi / 1.1 - Double(index) * 0.9
+        return CGFloat(max(0, sin(angle)))
+    }
+
+    private func dot(level: CGFloat) -> some View {
+        let size: CGFloat = dotSize
+        return Circle()
+            .fill(color)
+            .frame(width: size, height: size)
+            .opacity(Double(0.35 + 0.65 * level))
+            .offset(y: -size * 0.4 * level)
+    }
+}
+
+/// "Lan đang gõ…" ở cuối danh sách tin: ảnh đại diện chồng nhau + bong bóng ba chấm.
+private struct TypingIndicator: View {
+    let users: [RoomMessage.User]
+
+    private var label: String {
+        switch users.count {
+        case 1: return "\(users[0].name) đang gõ…"
+        case 2: return "\(users[0].name) và \(users[1].name) đang gõ…"
+        default: return "\(users.count) người đang gõ…"
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            HStack(spacing: -10) {
+                ForEach(Array(users.prefix(3).enumerated()), id: \.element.id) { index, user in
+                    SocialAvatar(url: user.avatarURL, initial: user.initial, size: 26)
+                        .background(Circle().fill(Color(.systemGroupedBackground)).padding(-1.5))
+                        .zIndex(Double(3 - index))
+                }
+            }
+            TypingDots(dotSize: 6)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 11)
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+            Text(label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
     }
 }

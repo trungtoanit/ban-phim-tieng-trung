@@ -65,6 +65,7 @@
 		B100000000000000000005C5 /* ChatRoomsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000005C6 /* ChatRoomsView.swift */; };
 		B100000000000000000005C3 /* FriendsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000005C4 /* FriendsView.swift */; };
 		B1000000000000000000F001 /* SocialFeed.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000F002 /* SocialFeed.swift */; };
+		B1000000000000000000F003 /* RoomGifts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000F004 /* RoomGifts.swift */; };
 		B100000000000000000005C1 /* SocialAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000005C2 /* SocialAPI.swift */; };
 		B100000000000000000004C3 /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000004C4 /* AccountView.swift */; };
 		B100000000000000000004C5 /* CloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000004C6 /* CloudSync.swift */; };
@@ -147,6 +148,7 @@
 		B100000000000000000005C6 /* ChatRoomsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatRoomsView.swift; sourceTree = "<group>"; };
 		B100000000000000000005C4 /* FriendsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendsView.swift; sourceTree = "<group>"; };
 		B1000000000000000000F002 /* SocialFeed.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialFeed.swift; sourceTree = "<group>"; };
+		B1000000000000000000F004 /* RoomGifts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoomGifts.swift; sourceTree = "<group>"; };
 		B100000000000000000005C2 /* SocialAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SocialAPI.swift; sourceTree = "<group>"; };
 		B100000000000000000004C4 /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
 		B100000000000000000004C6 /* CloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSync.swift; sourceTree = "<group>"; };
@@ -216,6 +218,7 @@
 				B100000000000000000005C6 /* ChatRoomsView.swift */,
 				B100000000000000000005C4 /* FriendsView.swift */,
 				B1000000000000000000F002 /* SocialFeed.swift */,
+				B1000000000000000000F004 /* RoomGifts.swift */,
 				B100000000000000000005C2 /* SocialAPI.swift */,
 				B100000000000000000004C4 /* AccountView.swift */,
 				B100000000000000000004C6 /* CloudSync.swift */,
@@ -404,6 +407,7 @@
 				B100000000000000000005C5 /* ChatRoomsView.swift in Sources */,
 				B100000000000000000005C3 /* FriendsView.swift in Sources */,
 				B1000000000000000000F001 /* SocialFeed.swift in Sources */,
+				B1000000000000000000F003 /* RoomGifts.swift in Sources */,
 				B100000000000000000005C1 /* SocialAPI.swift in Sources */,
 				B100000000000000000004C3 /* AccountView.swift in Sources */,
 				B100000000000000000004C5 /* CloudSync.swift in Sources */,
