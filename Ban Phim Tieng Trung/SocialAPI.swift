@@ -120,6 +120,9 @@ struct SocialUser: Codable, Identifiable, Hashable {
     var badges: [WallBadge] = []
     var recentTopics: [WallTopic] = []
     var rooms: [WallRoom] = []
+    /// Huân chương tuần đã nhận (mọi user) và lịch sử trao (chỉ hồ sơ).
+    var medals: Medals?
+    var awards: [WeeklyAward] = []
 
     var initial: String { String(name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased() }
     var handle: String? { username.map { "@\($0)" } }
@@ -129,7 +132,7 @@ struct SocialUser: Codable, Identifiable, Hashable {
         case id, name, username, avatar, weekSentences, todaySentences, totalSentences, streak
         case isMe, following, followsMe, online, lastSeenAt, followersCount, followingCount, joinedAt
         case bestStreak, activeDays, accuracy, avgCpm, topicsCount, topicsCompleted
-        case calendar, badges, recentTopics, rooms
+        case calendar, badges, recentTopics, rooms, medals, awards
     }
 
     /// Hồ sơ tạm từ thông tin rút gọn (tác giả tin nhắn, thành viên phòng); tường tải thêm từ máy chủ.
@@ -169,6 +172,8 @@ struct SocialUser: Codable, Identifiable, Hashable {
         badges = (try? c.decodeIfPresent([WallBadge].self, forKey: .badges)) ?? []
         recentTopics = (try? c.decodeIfPresent([WallTopic].self, forKey: .recentTopics)) ?? []
         rooms = (try? c.decodeIfPresent([WallRoom].self, forKey: .rooms)) ?? []
+        medals = try? c.decodeIfPresent(Medals.self, forKey: .medals)
+        awards = (try? c.decodeIfPresent([WeeklyAward].self, forKey: .awards)) ?? []
     }
 }
 
@@ -268,7 +273,9 @@ struct RoomMember: Codable, Identifiable, Hashable {
     var avatarURL: URL? { avatar.flatMap(URL.init(string:)) }
     var socialUser: SocialUser { SocialUser(id: id, name: name, username: username, avatar: avatar, online: online) }
 
-    enum CodingKeys: String, CodingKey { case id, name, username, avatar, isOwner, online }
+    var medals: Medals?
+
+    enum CodingKeys: String, CodingKey { case id, name, username, avatar, isOwner, online, medals }
 
     init(id: Int, name: String, username: String?, avatar: String?, isOwner: Bool = false, online: Bool = false) {
         self.id = id
@@ -287,6 +294,7 @@ struct RoomMember: Codable, Identifiable, Hashable {
         avatar = try c.decodeIfPresent(String.self, forKey: .avatar)
         isOwner = (try? c.decodeIfPresent(Bool.self, forKey: .isOwner)) ?? false
         online = (try? c.decodeIfPresent(Bool.self, forKey: .online)) ?? false
+        medals = try? c.decodeIfPresent(Medals.self, forKey: .medals)
     }
 }
 
@@ -296,6 +304,7 @@ struct RoomMessage: Codable, Identifiable, Hashable {
         let name: String
         let username: String?
         let avatar: String?
+        var medals: Medals? = nil
 
         var initial: String { String(name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased() }
         var avatarURL: URL? { avatar.flatMap(URL.init(string:)) }
@@ -369,6 +378,101 @@ struct RoomMessage: Codable, Identifiable, Hashable {
         replyTo = try? c.decodeIfPresent(ReplyRef.self, forKey: .replyTo)
         gift = try? c.decodeIfPresent(RoomGift.self, forKey: .gift)
         system = try? c.decodeIfPresent(SystemInfo.self, forKey: .system)
+    }
+}
+
+// MARK: - Huân chương tuần
+
+/// Số huân chương đã nhận.
+struct Medals: Codable, Hashable {
+    var gold = 0
+    var silver = 0
+    var bronze = 0
+
+    var total: Int { gold + silver + bronze }
+
+    enum CodingKeys: String, CodingKey { case gold, silver, bronze }
+
+    init(gold: Int = 0, silver: Int = 0, bronze: Int = 0) {
+        self.gold = gold
+        self.silver = silver
+        self.bronze = bronze
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        gold = (try? c.decodeIfPresent(Int.self, forKey: .gold)) ?? 0
+        silver = (try? c.decodeIfPresent(Int.self, forKey: .silver)) ?? 0
+        bronze = (try? c.decodeIfPresent(Int.self, forKey: .bronze)) ?? 0
+    }
+}
+
+/// Một lần được trao huân chương (trên tường).
+struct WeeklyAward: Codable, Hashable {
+    let weekStart: String
+    var weekEnd: String = ""
+    var rank: Int = 3
+    var medal: String = "🏅"
+    var sentences: Int = 0
+
+    enum CodingKeys: String, CodingKey { case weekStart, weekEnd, rank, medal, sentences }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        weekStart = try c.decode(String.self, forKey: .weekStart)
+        weekEnd = (try? c.decodeIfPresent(String.self, forKey: .weekEnd)) ?? ""
+        rank = (try? c.decodeIfPresent(Int.self, forKey: .rank)) ?? 3
+        medal = (try? c.decodeIfPresent(String.self, forKey: .medal)) ?? ["🥇", "🥈", "🥉"][max(0, min(2, rank - 1))]
+        sentences = (try? c.decodeIfPresent(Int.self, forKey: .sentences)) ?? 0
+    }
+}
+
+/// Người đạt top 3 của một tuần.
+struct AwardWinner: Codable, Hashable, Identifiable {
+    let id: Int
+    let name: String
+    let username: String?
+    let avatar: String?
+    var rank: Int = 3
+    var medal: String = "🏅"
+    var sentences: Int = 0
+    var isMe = false
+    var medals: Medals?
+
+    var initial: String { String(name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased() }
+    var avatarURL: URL? { avatar.flatMap(URL.init(string:)) }
+    var socialUser: SocialUser { SocialUser(id: id, name: name, username: username, avatar: avatar) }
+
+    enum CodingKeys: String, CodingKey { case id, name, username, avatar, rank, medal, sentences, isMe, medals }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Người học #\(id)"
+        username = try c.decodeIfPresent(String.self, forKey: .username)
+        avatar = try c.decodeIfPresent(String.self, forKey: .avatar)
+        rank = (try? c.decodeIfPresent(Int.self, forKey: .rank)) ?? 3
+        medal = (try? c.decodeIfPresent(String.self, forKey: .medal)) ?? ["🥇", "🥈", "🥉"][max(0, min(2, rank - 1))]
+        sentences = (try? c.decodeIfPresent(Int.self, forKey: .sentences)) ?? 0
+        isMe = (try? c.decodeIfPresent(Bool.self, forKey: .isMe)) ?? false
+        medals = try? c.decodeIfPresent(Medals.self, forKey: .medals)
+    }
+}
+
+struct AwardWeek: Codable, Hashable, Identifiable {
+    let weekStart: String
+    var weekEnd: String = ""
+    var winners: [AwardWinner] = []
+
+    var id: String { weekStart }
+
+    enum CodingKeys: String, CodingKey { case weekStart, weekEnd, winners }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        weekStart = try c.decode(String.self, forKey: .weekStart)
+        weekEnd = (try? c.decodeIfPresent(String.self, forKey: .weekEnd)) ?? ""
+        winners = ((try? c.decodeIfPresent([AwardWinner].self, forKey: .winners)) ?? []).sorted { $0.rank < $1.rank }
     }
 }
 
@@ -526,6 +630,8 @@ enum SocialAPI {
         // Quà
         let gifts: [GiftItem]?
         let senders: [GiftTopUser]?
+        // Bảng vàng
+        let weeks: [AwardWeek]?
         let receivers: [GiftTopUser]?
     }
 
@@ -647,6 +753,13 @@ enum SocialAPI {
                                     progress: progress)
         guard let message = e.message else { throw missing }
         return message
+    }
+
+    // MARK: Bảng vàng
+
+    /// Top 3 các tuần gần nhất (tuần mới nhất trước).
+    static func awards(weeks: Int = 8) async throws -> [AwardWeek] {
+        try await call("awards", ["weeks": weeks], method: "GET").weeks ?? []
     }
 
     // MARK: Quà tặng
@@ -894,12 +1007,13 @@ struct FeedUser: Codable, Hashable {
     let username: String?
     let avatar: String?
     var online: Bool = false
+    var medals: Medals?
 
     var initial: String { String(name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased() }
     var avatarURL: URL? { avatar.flatMap(URL.init(string:)) }
     var socialUser: SocialUser { SocialUser(id: id, name: name, username: username, avatar: avatar, online: online) }
 
-    enum CodingKeys: String, CodingKey { case id, name, username, avatar, online }
+    enum CodingKeys: String, CodingKey { case id, name, username, avatar, online, medals }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -908,6 +1022,7 @@ struct FeedUser: Codable, Hashable {
         username = try c.decodeIfPresent(String.self, forKey: .username)
         avatar = try c.decodeIfPresent(String.self, forKey: .avatar)
         online = (try? c.decodeIfPresent(Bool.self, forKey: .online)) ?? false
+        medals = try? c.decodeIfPresent(Medals.self, forKey: .medals)
     }
 }
 
@@ -1026,6 +1141,15 @@ enum SocialFormat {
         f.dateFormat = "yyyy-MM-dd"
         return f
     }()
+
+    /// "Tuần 07/09 – 13/09" (từ ngày "yyyy-MM-dd").
+    static func week(start: String, end: String) -> String {
+        func short(_ day: String) -> String {
+            let parts = day.prefix(10).split(separator: "-")
+            return parts.count == 3 ? "\(parts[2])/\(parts[1])" : day
+        }
+        return end.isEmpty ? "Tuần \(short(start))" : "Tuần \(short(start)) – \(short(end))"
+    }
 
     /// "Vừa xong", "5 phút", "3 giờ", "2 ngày", xa hơn thì "12/09/2025".
     static func ago(_ text: String?) -> String {

@@ -39,6 +39,16 @@ final class FriendsModel: ObservableObject {
     @Published var loaded = false
     @Published var searching = false
     @Published var errorMessage: String?
+    /// Bảng vàng: top 3 các tuần đã chốt (mới nhất trước).
+    @Published var awardWeeks: [AwardWeek] = []
+    @Published var awardsLoaded = false
+
+    func loadAwards() async {
+        if let weeks = try? await SocialAPI.awards(weeks: 8) {
+            awardWeeks = weeks
+        }
+        awardsLoaded = true
+    }
 
     func load() async {
         do {
@@ -157,10 +167,12 @@ private struct FriendsHomeView: View {
                 await feed.load()
             }
             await model.load()
+            await model.loadAwards()
         }
         // Tải lần đầu rồi tự làm mới mỗi 30 giây khi màn hình đang mở.
         .task {
             await model.load()
+            await model.loadAwards()
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 30_000_000_000)
                 guard !Task.isCancelled else { break }
@@ -187,6 +199,7 @@ private struct FriendsHomeView: View {
                             .listRowInsets(EdgeInsets())
                     }
                     listSection
+                    GoldBoardSection(weeks: model.awardWeeks, loaded: model.awardsLoaded)
                     leaderboardSection
                     suggestionsSection
                 }
@@ -338,6 +351,7 @@ private struct FriendsHomeView: View {
             Text(user.isMe ? "Bạn" : user.name)
                 .font(.subheadline.weight(user.isMe ? .bold : .semibold))
                 .lineLimit(1)
+            MedalChips(medals: user.medals)
             Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 2) {
                 Text("\(user.weekSentences) câu")
@@ -390,9 +404,12 @@ struct SocialUserRow: View {
             SocialAvatar(url: user.avatarURL, initial: user.initial, size: 44, online: user.online,
                          ring: Color(.secondarySystemGroupedBackground))
             VStack(alignment: .leading, spacing: 2) {
-                Text(user.name)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
+                HStack(spacing: 5) {
+                    Text(user.name)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                    MedalChips(medals: user.medals)
+                }
                 if let handle = user.handle {
                     Text(handle)
                         .font(.caption)
@@ -555,6 +572,7 @@ struct SocialProfileView: View {
                     .padding(.horizontal, 40)
                 }
                 statsGrid
+                WallMedalsCard(medals: user.medals, awards: user.awards)
                 if !user.calendar.isEmpty { calendarCard }
                 if !user.badges.isEmpty { badgesCard }
                 if !user.recentTopics.isEmpty { topicsCard }

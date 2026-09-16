@@ -610,10 +610,13 @@ struct PostCard: View {
                     SocialAvatar(url: post.user.avatarURL, initial: post.user.initial, size: 42, online: post.user.online,
                                  ring: Color(.secondarySystemGroupedBackground))
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(post.user.name)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
+                        HStack(spacing: 5) {
+                            Text(post.user.name)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                            MedalChips(medals: post.user.medals)
+                        }
                         HStack(spacing: 4) {
                             Text(SocialFormat.ago(post.createdAt))
                             if let label = kindLabel {

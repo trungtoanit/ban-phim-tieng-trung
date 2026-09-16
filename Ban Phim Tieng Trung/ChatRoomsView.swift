@@ -394,6 +394,7 @@ struct RoomMembersView: View {
                                         .font(.subheadline.weight(.semibold))
                                         .lineLimit(1)
                                     if member.isOwner { Text("👑").font(.caption) }
+                                    MedalChips(medals: member.medals)
                                 }
                                 HStack(spacing: 6) {
                                     if member.isOwner {
@@ -608,6 +609,11 @@ final class RoomChatModel: ObservableObject {
     }
 
     private var linkCache: [Int: Bool] = [:]
+
+    /// Huân chương của người trong phòng (từ danh sách thành viên), để hiện cạnh tên người gửi.
+    func medals(for userID: Int) -> Medals? {
+        room.members.first { $0.id == userID }?.medals
+    }
 
     /// Tin có link http/https (dò một lần rồi nhớ).
     func hasLink(_ message: RoomMessage) -> Bool {
@@ -1427,6 +1433,7 @@ struct RoomChatView: View {
                                         .font(.caption2)
                                         .accessibilityLabel("Chủ phòng")
                                 }
+                                MedalChips(medals: message.user.medals ?? model.medals(for: message.user.id))
                             }
                         }
                         .buttonStyle(.plain)
