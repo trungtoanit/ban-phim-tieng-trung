@@ -6,7 +6,16 @@
 import Foundation
 
 enum AppGroup {
-    static let identifier = "group.hihi.Ban-Phim-Tieng-Trung"
+    /// Lấy từ khoá AppGroupID trong Info.plist của app và của bàn phím (build setting APP_GROUP_ID,
+    /// xem Config/Shared.xcconfig), để mỗi máy dùng App Group của team Apple riêng mà không sửa mã.
+    static let identifier: String = {
+        if let value = Bundle.main.object(forInfoDictionaryKey: "AppGroupID") as? String,
+           value.hasPrefix("group.") {
+            return value
+        }
+        assertionFailure("Thiếu AppGroupID trong Info.plist. Kiểm tra APP_GROUP_ID trong Config/Shared.xcconfig.")
+        return "group.hihi.Ban-Phim-Tieng-Trung"
+    }()
     static let urlScheme = "banphimtrung"
     static let activationURL = URL(string: "banphimtrung://activate")!
 

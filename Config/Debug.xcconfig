@@ -1,3 +1,6 @@
-// Cấu hình Debug của app. Khoá đăng nhập giả lập (DEV_LOGIN_SECRET) nằm trong file cục bộ
-// DevLogin.local.xcconfig — không commit (repo public). Thiếu file thì nút Google chỉ báo lỗi như cũ.
+// Cấu hình Debug của cả project (2 target).
+#include "Shared.xcconfig"
+
+// Khoá đăng nhập giả lập (DEV_LOGIN_SECRET) nằm trong file cục bộ DevLogin.local.xcconfig — không
+// commit (repo public). Thiếu file thì nút Google chỉ báo lỗi như cũ.
 #include? "DevLogin.local.xcconfig"

@@ -1,0 +1,2 @@
+// Cấu hình Release của cả project (2 target).
+#include "Shared.xcconfig"

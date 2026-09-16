@@ -1,0 +1,18 @@
+// Mẫu cấu hình ký ứng dụng theo từng máy. Sao chép thành Config/Signing.local.xcconfig (đã gitignore)
+// rồi điền giá trị của tài khoản Apple trên máy này. Chỉ cần ghi những biến muốn ghi đè;
+// biến nào bỏ trống sẽ lấy mặc định trong Shared.xcconfig.
+//
+//   cp Config/Signing.local.xcconfig.example Config/Signing.local.xcconfig
+
+// Team ID Apple của bạn.
+DEVELOPMENT_TEAM = XXXXXXXXXX
+
+// App Group riêng cho team của bạn (bắt buộc đổi, vì tên mặc định đã thuộc team khác).
+APP_GROUP_ID = group.com.tenban.banphimtrung
+
+// Chỉ cần khi Xcode báo Bundle ID mặc định "is not available" (đã đăng ký ở team khác).
+// Nhớ sửa Bundle ID trong OAuth client iOS trên Google Cloud Console cho khớp.
+// BUNDLE_ID_BASE = com.tenban.banphimtrung
+
+// Chỉ cần khi bạn dùng OAuth client iOS riêng.
+// GOOGLE_IOS_CLIENT_ID = xxxx.apps.googleusercontent.com

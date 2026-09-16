@@ -19,10 +19,19 @@
 ## Chạy dự án
 
 1. Mở `Ban Phim Tieng Trung.xcodeproj` bằng Xcode 15+.
-2. Chọn **Team** trong *Signing & Capabilities* cho cả 2 target: `Ban Phim Tieng Trung` và `BanPhimTrungKeyboard`.
-3. Đảm bảo cả 2 target có App Group `group.hihi.Ban-Phim-Tieng-Trung` (đổi bundle id / App Group nếu cần).
-4. Chạy trên iPhone thật, rồi bật bàn phím: Cài đặt → Cài đặt chung → Bàn phím → Thêm bàn phím mới → **Bàn Phím Trung**, bật **Cho phép truy cập đầy đủ**.
-5. Hội thoại AI: mở tab **Hội thoại AI** → ⚙︎ → nhập khoá OpenAI của bạn (lưu trong Keychain, không nằm trong mã nguồn).
+2. Tạo cấu hình ký riêng cho máy của bạn (file này đã gitignore, không commit):
+
+   ```bash
+   cp Config/Signing.local.xcconfig.example Config/Signing.local.xcconfig
+   ```
+
+   Điền `DEVELOPMENT_TEAM` (Team ID Apple của bạn) và `APP_GROUP_ID` (tên App Group riêng, ví dụ
+   `group.com.tenban.banphimtrung`). Nếu Xcode báo Bundle ID mặc định "is not available" thì điền thêm
+   `BUNDLE_ID_BASE` và sửa Bundle ID trong OAuth client iOS trên Google Cloud Console cho khớp.
+   **Không** chọn Team hay sửa Bundle ID / App Group trong giao diện Xcode: Xcode sẽ ghi vào
+   `project.pbxproj` và làm bẩn repo chung. Giá trị mặc định nằm ở `Config/Shared.xcconfig`.
+3. Chạy trên iPhone thật, rồi bật bàn phím: Cài đặt → Cài đặt chung → Bàn phím → Thêm bàn phím mới → **Bàn Phím Trung**, bật **Cho phép truy cập đầy đủ**.
+4. Đăng nhập Google: app dùng OAuth client iOS khai ở `GOOGLE_IOS_CLIENT_ID` trong `Config/Shared.xcconfig`; server cũng phải có cùng giá trị ở `GOOGLE_IOS_CLIENT_ID` trong `.env`.
 
 ## Lưu ý
 

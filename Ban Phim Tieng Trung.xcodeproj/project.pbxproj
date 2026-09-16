@@ -97,7 +97,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		C0DE00000000000000000001 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Debug.xcconfig; sourceTree = "<group>"; };
+		C0DE00000000000000000001 /* Config/Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Debug.xcconfig; sourceTree = "<group>"; };
+		C0DE00000000000000000002 /* Config/Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Shared.xcconfig; sourceTree = "<group>"; };
+		C0DE00000000000000000003 /* Config/Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config/Release.xcconfig; sourceTree = "<group>"; };
 		04DC04A73057BAF900AE3DF2 /* Ban Phim Tieng Trung.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Ban Phim Tieng Trung.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		04DC04AA3057BAF900AE3DF2 /* Ban_Phim_Tieng_TrungApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Ban_Phim_Tieng_TrungApp.swift; sourceTree = "<group>"; };
 		04DC04AC3057BAF900AE3DF2 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -177,7 +179,9 @@
 		04DC049E3057BAF800AE3DF2 = {
 			isa = PBXGroup;
 			children = (
-				C0DE00000000000000000001 /* Debug.xcconfig */,
+				C0DE00000000000000000001 /* Config/Debug.xcconfig */,
+				C0DE00000000000000000002 /* Config/Shared.xcconfig */,
+				C0DE00000000000000000003 /* Config/Release.xcconfig */,
 				04DC04A93057BAF900AE3DF2 /* Ban Phim Tieng Trung */,
 				B10000000000000000000030 /* Shared */,
 				B10000000000000000000031 /* BanPhimTrungKeyboard */,
@@ -460,6 +464,7 @@
 /* Begin XCBuildConfiguration section */
 		04DC04B33057BAFA00AE3DF2 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C0DE00000000000000000001 /* Config/Debug.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -493,7 +498,6 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 5G537NZ6R8;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -524,6 +528,7 @@
 		};
 		04DC04B43057BAFA00AE3DF2 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C0DE00000000000000000003 /* Config/Release.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -557,7 +562,6 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 5G537NZ6R8;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -581,7 +585,6 @@
 		};
 		04DC04B63057BAFA00AE3DF2 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = C0DE00000000000000000001 /* Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = "AppIcon-Sad AppIcon-Angry AppIcon-Crying";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -590,7 +593,6 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Ban Phim Tieng Trung/Preview Content\"";
-				DEVELOPMENT_TEAM = 5G537NZ6R8;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Ban Phim Tieng Trung/Info.plist";
@@ -607,7 +609,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "hihi.Ban-Phim-Tieng-Trung";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID_BASE)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -625,7 +627,6 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Ban Phim Tieng Trung/Preview Content\"";
-				DEVELOPMENT_TEAM = 5G537NZ6R8;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Ban Phim Tieng Trung/Info.plist";
@@ -642,7 +643,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "hihi.Ban-Phim-Tieng-Trung";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID_BASE)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -656,7 +657,6 @@
 				CODE_SIGN_ENTITLEMENTS = BanPhimTrungKeyboard/BanPhimTrungKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 5G537NZ6R8;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = BanPhimTrungKeyboard/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Bàn Phím Trung";
@@ -667,7 +667,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "hihi.Ban-Phim-Tieng-Trung.Keyboard";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID_BASE).Keyboard";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -682,7 +682,6 @@
 				CODE_SIGN_ENTITLEMENTS = BanPhimTrungKeyboard/BanPhimTrungKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = 5G537NZ6R8;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = BanPhimTrungKeyboard/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Bàn Phím Trung";
@@ -693,7 +692,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "hihi.Ban-Phim-Tieng-Trung.Keyboard";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BUNDLE_ID_BASE).Keyboard";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;

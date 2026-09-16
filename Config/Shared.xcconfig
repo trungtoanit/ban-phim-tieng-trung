@@ -1,0 +1,21 @@
+// Định danh Apple / Google dùng chung cho mọi cấu hình build (Debug lẫn Release, cả 2 target).
+//
+// Dự án làm chung, mỗi máy có thể ký bằng tài khoản Apple khác nhau. Máy nào cần giá trị riêng thì
+// tạo Config/Signing.local.xcconfig (không commit, xem Signing.local.xcconfig.example) và ghi đè
+// các biến dưới đây. KHÔNG chọn Team / sửa Bundle ID trong giao diện Xcode: Xcode sẽ ghi thẳng vào
+// project.pbxproj và làm bẩn repo chung.
+
+// Team ID Apple (Xcode > Settings > Accounts, hoặc developer.apple.com > Membership).
+DEVELOPMENT_TEAM = 5G537NZ6R8
+
+// Bundle ID của app chính; bàn phím tự thêm hậu tố ".Keyboard". Là duy nhất theo từng team Apple.
+BUNDLE_ID_BASE = hihi.Ban-Phim-Tieng-Trung
+
+// App Group để app và bàn phím chia sẻ dữ liệu. Là duy nhất trên toàn Apple, mỗi team cần tên riêng.
+APP_GROUP_ID = group.hihi.Ban-Phim-Tieng-Trung
+
+// OAuth client loại iOS trên Google Cloud Console (cùng project với GOOGLE_CLIENT_ID của web).
+GOOGLE_IOS_CLIENT_ID = 614861743536-uata65mkn9jsqqds8fj5b8dnb2p7v2o3.apps.googleusercontent.com
+
+// Ghi đè theo máy (đặt cuối file để thắng các giá trị mặc định ở trên).
+#include? "Signing.local.xcconfig"
