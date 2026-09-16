@@ -311,8 +311,34 @@ struct RoomMessage: Codable, Identifiable, Hashable {
     let user: User
     /// Ảnh đính kèm (tin có ảnh thì `text` có thể rỗng).
     var image: SocialImage?
+    /// Tin này trả lời tin nào (trích dẫn ngắn).
+    var replyTo: ReplyRef?
+    /// Tin tặng quà (chữ rỗng).
+    var gift: RoomGift?
 
-    enum CodingKeys: String, CodingKey { case id, text, createdAt, mine, user, image }
+    /// Trích dẫn tin được trả lời.
+    struct ReplyRef: Codable, Hashable {
+        let id: Int
+        var userId: Int = 0
+        var name: String = ""
+        var text: String = ""
+        var hasImage = false
+        var deleted = false
+
+        enum CodingKeys: String, CodingKey { case id, userId, name, text, hasImage, deleted }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(Int.self, forKey: .id)
+            userId = (try? c.decodeIfPresent(Int.self, forKey: .userId)) ?? 0
+            name = (try? c.decodeIfPresent(String.self, forKey: .name)) ?? ""
+            text = (try? c.decodeIfPresent(String.self, forKey: .text)) ?? ""
+            hasImage = (try? c.decodeIfPresent(Bool.self, forKey: .hasImage)) ?? false
+            deleted = (try? c.decodeIfPresent(Bool.self, forKey: .deleted)) ?? false
+        }
+    }
+
+    enum CodingKeys: String, CodingKey { case id, text, createdAt, mine, user, image, replyTo, gift }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -322,6 +348,85 @@ struct RoomMessage: Codable, Identifiable, Hashable {
         mine = try c.decodeIfPresent(Bool.self, forKey: .mine) ?? false
         user = try c.decode(User.self, forKey: .user)
         image = try? c.decodeIfPresent(SocialImage.self, forKey: .image)
+        replyTo = try? c.decodeIfPresent(ReplyRef.self, forKey: .replyTo)
+        gift = try? c.decodeIfPresent(RoomGift.self, forKey: .gift)
+    }
+}
+
+// MARK: - Quà tặng (miễn phí)
+
+enum GiftTier: String, Codable, Hashable {
+    case small, medium, big, epic
+
+    init(raw: String?) {
+        self = GiftTier(rawValue: raw ?? "") ?? .small
+    }
+}
+
+/// Một món trong danh mục quà.
+struct GiftItem: Codable, Hashable, Identifiable {
+    let key: String
+    let emoji: String
+    let name: String
+    var tier: GiftTier = .small
+
+    var id: String { key }
+
+    enum CodingKeys: String, CodingKey { case key, emoji, name, tier }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        key = try c.decode(String.self, forKey: .key)
+        emoji = try c.decodeIfPresent(String.self, forKey: .emoji) ?? "🎁"
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? key
+        tier = GiftTier(raw: try? c.decodeIfPresent(String.self, forKey: .tier))
+    }
+}
+
+/// Quà gắn trên tin nhắn.
+struct RoomGift: Codable, Hashable {
+    let key: String
+    let emoji: String
+    let name: String
+    var tier: GiftTier = .small
+    var count: Int = 1
+    /// Người nhận; nil = cả phòng.
+    var to: RoomMessage.User?
+
+    enum CodingKeys: String, CodingKey { case key, emoji, name, tier, count, to }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        key = try c.decodeIfPresent(String.self, forKey: .key) ?? ""
+        emoji = try c.decodeIfPresent(String.self, forKey: .emoji) ?? "🎁"
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Quà"
+        tier = GiftTier(raw: try? c.decodeIfPresent(String.self, forKey: .tier))
+        count = max(1, (try? c.decodeIfPresent(Int.self, forKey: .count)) ?? 1)
+        to = try? c.decodeIfPresent(RoomMessage.User.self, forKey: .to)
+    }
+}
+
+/// Một dòng bảng xếp hạng quà trong phòng.
+struct GiftTopUser: Codable, Hashable, Identifiable {
+    let id: Int
+    let name: String
+    let username: String?
+    let avatar: String?
+    var total: Int = 0
+
+    var initial: String { String(name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased() }
+    var avatarURL: URL? { avatar.flatMap(URL.init(string:)) }
+    var socialUser: SocialUser { SocialUser(id: id, name: name, username: username, avatar: avatar) }
+
+    enum CodingKeys: String, CodingKey { case id, name, username, avatar, total }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Người học #\(id)"
+        username = try c.decodeIfPresent(String.self, forKey: .username)
+        avatar = try c.decodeIfPresent(String.self, forKey: .avatar)
+        total = (try? c.decodeIfPresent(Int.self, forKey: .total)) ?? 0
     }
 }
 
@@ -395,6 +500,10 @@ enum SocialAPI {
         let comment: PostComment?
         let likeCount: Int?
         let liked: Bool?
+        // Quà
+        let gifts: [GiftItem]?
+        let senders: [GiftTopUser]?
+        let receivers: [GiftTopUser]?
     }
 
     /// Phần chung của mọi phản hồi, đọc trước để báo lỗi / hết phiên.
@@ -488,8 +597,10 @@ enum SocialAPI {
         _ = try await call("room_delete", ["id": id])
     }
 
-    static func send(roomId: Int, text: String) async throws -> RoomMessage {
-        guard let message = try await call("room_send", ["id": roomId, "text": text]).message else { throw missing }
+    static func send(roomId: Int, text: String, replyTo: Int? = nil) async throws -> RoomMessage {
+        var params: [String: Any] = ["id": roomId, "text": text]
+        if let replyTo { params["replyTo"] = replyTo }
+        guard let message = try await call("room_send", params).message else { throw missing }
         return message
     }
 
@@ -498,12 +609,40 @@ enum SocialAPI {
     }
 
     /// Gửi ảnh (JPEG đã nén) vào phòng, kèm chữ nếu có.
-    static func sendImage(roomId: Int, text: String, jpeg: Data, progress: ((Double) -> Void)? = nil) async throws -> RoomMessage {
-        let e = try await multipart("room_send", fields: ["id": String(roomId), "text": text],
+    static func sendImage(roomId: Int, text: String, jpeg: Data, replyTo: Int? = nil,
+                          progress: ((Double) -> Void)? = nil) async throws -> RoomMessage {
+        var fields = ["id": String(roomId), "text": text]
+        if let replyTo { fields["replyTo"] = String(replyTo) }
+        let e = try await multipart("room_send", fields: fields,
                                     files: [UploadFile(field: "image", filename: "photo.jpg", mimeType: "image/jpeg", data: jpeg)],
                                     progress: progress)
         guard let message = e.message else { throw missing }
         return message
+    }
+
+    // MARK: Quà tặng
+
+    private static var giftCache: [GiftItem]?
+
+    /// Danh mục quà (lưu tạm trong lúc app mở).
+    static func gifts() async throws -> [GiftItem] {
+        if let giftCache, !giftCache.isEmpty { return giftCache }
+        let list = try await call("gifts", method: "GET").gifts ?? []
+        giftCache = list
+        return list
+    }
+
+    /// Tặng quà trong phòng; `to` nil = cả phòng; `count` 1…99.
+    static func sendGift(roomId: Int, gift: String, to: Int?, count: Int) async throws -> RoomMessage {
+        var params: [String: Any] = ["id": roomId, "gift": gift, "count": max(1, min(99, count))]
+        if let to { params["to"] = to }
+        guard let message = try await call("room_gift", params).message else { throw missing }
+        return message
+    }
+
+    static func giftTop(roomId: Int) async throws -> (senders: [GiftTopUser], receivers: [GiftTopUser]) {
+        let e = try await call("gift_top", ["id": roomId], method: "GET")
+        return (e.senders ?? [], e.receivers ?? [])
     }
 
     // MARK: Bảng tin

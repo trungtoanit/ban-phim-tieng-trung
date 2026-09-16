@@ -592,6 +592,17 @@ final class RoomChatModel: ObservableObject {
         }
     }
 
+    /// Tìm tin gốc để cuộn tới: chưa có thì tải thêm tin cũ vài lần. Trả về false nếu quá cũ / đã xoá.
+    func ensureLoaded(messageID: Int, maxPages: Int = 5) async -> Bool {
+        var pages = 0
+        while !messages.contains(where: { $0.id == messageID }) {
+            guard hasMore, pages < maxPages, let first = messages.first, first.id > messageID else { return false }
+            await loadOlder()
+            pages += 1
+        }
+        return true
+    }
+
     func loadOlder() async {
         guard let first = messages.first, !loadingOlder else { return }
         loadingOlder = true
@@ -607,13 +618,23 @@ final class RoomChatModel: ObservableObject {
         }
     }
 
+    /// Tin đang được trả lời (thanh "Đang trả lời" trên ô soạn tin). Mọi kiểu gửi đều kèm theo.
+    @Published var replyingTo: RoomMessage?
+
+    /// Bỏ thanh trả lời sau khi gửi xong (nếu người dùng chưa đổi sang trả lời tin khác).
+    private func clearReply(_ id: Int?) {
+        if let id, replyingTo?.id == id { replyingTo = nil }
+    }
+
     func send(_ text: String) async -> Bool {
         let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, text.count <= Self.maxLength, !sending else { return false }
         sending = true
         defer { sending = false }
+        let replyID = replyingTo?.id
         do {
-            let message = try await SocialAPI.send(roomId: room.id, text: text)
+            let message = try await SocialAPI.send(roomId: room.id, text: text, replyTo: replyID)
+            clearReply(replyID)
             merge([message])
             if !room.joined {
                 room.joined = true
@@ -646,8 +667,11 @@ final class RoomChatModel: ObservableObject {
         let upload = PendingUpload(preview: image)
         uploads.append(upload)
         defer { uploads.removeAll { $0.id == upload.id } }
+        let replyID = replyingTo?.id
+        // Ảnh đang tải lên đã mang theo trả lời: bỏ thanh ngay để tin kế tiếp không trả lời trùng.
+        clearReply(replyID)
         do {
-            let message = try await SocialAPI.sendImage(roomId: room.id, text: "", jpeg: jpeg) { [weak self] value in
+            let message = try await SocialAPI.sendImage(roomId: room.id, text: "", jpeg: jpeg, replyTo: replyID) { [weak self] value in
                 guard let self, let index = self.uploads.firstIndex(where: { $0.id == upload.id }) else { return }
                 self.uploads[index].progress = value
             }
@@ -717,6 +741,10 @@ struct RoomChatView: View {
     @State private var confirmDelete = false
     @State private var selectedWord: SelectedWord?
     @State private var viewingImage: SocialImage?
+    /// Tin cần cuộn tới (bấm vào trích dẫn) và tin đang được tô sáng.
+    @State private var scrollTarget: Int?
+    @State private var highlightedID: Int?
+    @State private var toast: String?
     @State private var composerFocused = false
     @AppStorage(SharedSettings.showHanVietKey, store: SharedSettings.store) private var showHanViet = false
 
@@ -764,6 +792,13 @@ struct RoomChatView: View {
                     let onlineIDs = model.onlineIDs
                     ForEach(model.messages) { message in
                         bubble(message, online: onlineIDs.contains(message.user.id))
+                            .padding(.vertical, 3)
+                            .padding(.horizontal, -4)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(socialRed.opacity(highlightedID == message.id ? 0.14 : 0))
+                            )
+                            .modifier(SwipeToReply { startReply(message) })
                             .id(message.id)
                     }
 
@@ -785,6 +820,18 @@ struct RoomChatView: View {
             .onChange(of: model.messages.last?.id) { _ in
                 withAnimation(.easeOut(duration: 0.2)) {
                     proxy.scrollTo(Self.bottomID, anchor: .bottom)
+                }
+            }
+            .onChange(of: scrollTarget) { target in
+                guard let target else { return }
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    proxy.scrollTo(target, anchor: .center)
+                }
+                withAnimation(.easeIn(duration: 0.2)) { highlightedID = target }
+                scrollTarget = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                    guard highlightedID == target else { return }
+                    withAnimation(.easeOut(duration: 0.5)) { highlightedID = nil }
                 }
             }
             .onChange(of: model.uploads.count) { _ in
@@ -810,6 +857,19 @@ struct RoomChatView: View {
             ToolbarItem(placement: .navigationBarTrailing) { menu }
         }
         .wordPopup($selectedWord)
+        .overlay(alignment: .top) {
+            if let toast {
+                Text(toast)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(Capsule().fill(Color.black.opacity(0.78)))
+                    .padding(.top, 70)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .accessibilityAddTraits(.isStaticText)
+            }
+        }
         .fullScreenCover(item: $viewingImage) { image in
             ZoomableImageViewer(url: image.imageURL)
         }
@@ -985,6 +1045,88 @@ struct RoomChatView: View {
         }
     }
 
+    // MARK: Trả lời
+
+    private func startReply(_ message: RoomMessage) {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        withAnimation(.easeOut(duration: 0.15)) { model.replyingTo = message }
+    }
+
+    /// Bấm vào trích dẫn: cuộn tới tin gốc (tải thêm tin cũ nếu cần) và tô sáng.
+    private func jumpToOriginal(_ reply: RoomMessage.ReplyRef) {
+        guard !reply.deleted else {
+            showToast("Tin nhắn gốc đã bị xoá")
+            return
+        }
+        Task {
+            if await model.ensureLoaded(messageID: reply.id) {
+                // Đợi danh sách vẽ xong những tin vừa tải rồi mới cuộn.
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                scrollTarget = reply.id
+            } else {
+                showToast("Tin nhắn gốc quá cũ")
+            }
+        }
+    }
+
+    private func showToast(_ text: String) {
+        withAnimation { toast = text }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            guard toast == text else { return }
+            withAnimation { toast = nil }
+        }
+    }
+
+    /// Khối trích dẫn nhỏ ở đầu bong bóng: vạch đỏ, tên in đậm, 2 dòng nội dung.
+    private func quoteBlock(_ reply: RoomMessage.ReplyRef, mine: Bool) -> some View {
+        Button {
+            jumpToOriginal(reply)
+        } label: {
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(socialRed)
+                    .frame(width: 3)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(reply.name.isEmpty ? "Tin nhắn" : reply.name)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(socialRed)
+                        .lineLimit(1)
+                    Group {
+                        if reply.deleted {
+                            Text("Tin nhắn đã bị xoá").italic()
+                        } else {
+                            Text(Self.snippet(text: reply.text, hasImage: reply.hasImage))
+                        }
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.vertical, 6)
+            .padding(.leading, 6)
+            .padding(.trailing, 10)
+            .frame(maxWidth: 240, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(mine ? socialRed.opacity(0.07) : Color(.tertiarySystemFill))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Trả lời \(reply.name): \(reply.deleted ? "tin đã bị xoá" : Self.snippet(text: reply.text, hasImage: reply.hasImage))")
+        .accessibilityHint("Chạm để xem tin gốc")
+    }
+
+    static func snippet(text: String, hasImage: Bool) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return hasImage ? "📷 Hình ảnh" : "" }
+        return hasImage ? "📷 " + trimmed : trimmed
+    }
+
     // MARK: Tin nhắn
 
     @ViewBuilder
@@ -1028,6 +1170,10 @@ struct RoomChatView: View {
                     }
                 }
 
+                if let reply = message.replyTo {
+                    quoteBlock(reply, mine: message.mine)
+                }
+
                 if let image = message.image {
                     Button {
                         viewingImage = image
@@ -1036,6 +1182,11 @@ struct RoomChatView: View {
                     }
                     .buttonStyle(.plain)
                     .contextMenu {
+                        Button {
+                            startReply(message)
+                        } label: {
+                            Label("Trả lời", systemImage: "arrowshape.turn.up.left")
+                        }
                         if canDelete {
                             Button(role: .destructive) {
                                 Task { await model.delete(message) }
@@ -1056,6 +1207,11 @@ struct RoomChatView: View {
                     )
                     .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .contextMenu {
+                        Button {
+                            startReply(message)
+                        } label: {
+                            Label("Trả lời", systemImage: "arrowshape.turn.up.left")
+                        }
                         if hasHan {
                             Button {
                                 voice.speak(message.text)
@@ -1434,6 +1590,9 @@ private struct RoomComposer: View {
                 }
                 .padding(.horizontal, 4)
             }
+            if let reply = model.replyingTo {
+                replyBar(reply)
+            }
             if textMode {
                 textRow
             } else {
@@ -1455,6 +1614,10 @@ private struct RoomComposer: View {
         .animation(.easeInOut(duration: 0.18), value: voice.outgoing)
         .animation(.easeInOut(duration: 0.18), value: voice.pendingVi)
         .onChange(of: fieldFocused) { focused = $0 }
+        .animation(.easeInOut(duration: 0.15), value: model.replyingTo?.id)
+        .onChange(of: model.replyingTo?.id) { id in
+            if id != nil, textMode { fieldFocused = true }
+        }
         .onAppear { voice.typing = textMode }
         .onChange(of: textMode) { voice.typing = $0 }
         .confirmationDialog("Gửi ảnh", isPresented: $choosingPhotoSource) {
@@ -1480,6 +1643,43 @@ private struct RoomComposer: View {
             }
             .ignoresSafeArea()
         }
+    }
+
+    /// Thanh "Đang trả lời …" trên hàng micro / ô gõ chữ.
+    private func replyBar(_ message: RoomMessage) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrowshape.turn.up.left.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(socialRed)
+            RoundedRectangle(cornerRadius: 2)
+                .fill(socialRed)
+                .frame(width: 3, height: 32)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Đang trả lời \(message.mine ? "chính bạn" : message.user.name)")
+                    .font(.caption.weight(.bold))
+                    .lineLimit(1)
+                Text(RoomChatView.snippet(text: message.text, hasImage: message.image != nil))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            Button {
+                model.replyingTo = nil
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(Circle().fill(Color(.secondarySystemFill)))
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Huỷ trả lời")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     /// Chọn ảnh: có máy ảnh thì hỏi thư viện / chụp, không thì mở thư viện luôn.
@@ -1814,5 +2014,55 @@ private struct RoomTranscriptView: View {
         }
         let all = ChineseText.words(for: trimmed)
         words = all.count > maxWords ? Array(all.suffix(maxWords)) : all
+    }
+}
+
+/// Vuốt sang phải một tin để trả lời: lộ biểu tượng ↩, rung nhẹ khi qua ngưỡng.
+private struct SwipeToReply: ViewModifier {
+    let onReply: () -> Void
+
+    @State private var offset: CGFloat = 0
+    @State private var armed = false
+    @State private var horizontal: Bool?
+
+    private let threshold: CGFloat = 64
+
+    func body(content: Content) -> some View {
+        content
+            .offset(x: offset)
+            .background(alignment: .leading) {
+                Image(systemName: "arrowshape.turn.up.left.fill")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(armed ? .white : socialRed)
+                    .frame(width: 32, height: 32)
+                    .background(Circle().fill(armed ? socialRed : socialRed.opacity(0.14)))
+                    .scaleEffect(armed ? 1.1 : max(0.4, offset / threshold))
+                    .opacity(Double(min(1, offset / (threshold * 0.6))))
+                    .padding(.leading, 4)
+                    .accessibilityHidden(true)
+            }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 18, coordinateSpace: .local)
+                    .onChanged { value in
+                        // Chỉ nhận vuốt ngang, để cuộn dọc vẫn bình thường.
+                        if horizontal == nil {
+                            horizontal = abs(value.translation.width) > abs(value.translation.height) * 1.5
+                        }
+                        guard horizontal == true else { return }
+                        let dx = max(0, value.translation.width)
+                        offset = dx < threshold ? dx : threshold + (dx - threshold) * 0.25
+                        let nowArmed = dx >= threshold
+                        if nowArmed != armed {
+                            armed = nowArmed
+                            if nowArmed { UISelectionFeedbackGenerator().selectionChanged() }
+                        }
+                    }
+                    .onEnded { _ in
+                        if horizontal == true, armed { onReply() }
+                        horizontal = nil
+                        armed = false
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { offset = 0 }
+                    }
+            )
     }
 }
