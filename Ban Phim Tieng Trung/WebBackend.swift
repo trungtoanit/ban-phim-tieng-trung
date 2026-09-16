@@ -398,6 +398,23 @@ enum WebConversationAPI {
         let cpm: Int?
         let accuracy: Double?
         let wrongChars: Int?
+
+        private enum CodingKeys: String, CodingKey { case input, cpm, accuracy, wrongChars }
+
+        /// Đọc từng trường "mềm": máy chủ đổi kiểu số (vd 156.5 thay vì 156) không được làm hỏng cả lượt trả lời.
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            input = try? c.decodeIfPresent(String.self, forKey: .input)
+            cpm = Self.number(c, .cpm).map { Int($0.rounded()) }
+            accuracy = Self.number(c, .accuracy)
+            wrongChars = Self.number(c, .wrongChars).map { Int($0.rounded()) }
+        }
+
+        private static func number(_ c: KeyedDecodingContainer<CodingKeys>, _ key: CodingKeys) -> Double? {
+            if let value = try? c.decodeIfPresent(Double.self, forKey: key) { return value }
+            if let text = try? c.decodeIfPresent(String.self, forKey: key) { return Double(text) }
+            return nil
+        }
     }
 
     /// Cách người học nhập câu, gửi kèm `send` để máy chủ phân tích phát âm / tốc độ nói.
