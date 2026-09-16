@@ -131,15 +131,14 @@ struct ConversationTopicsView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    if web.isSignedIn, let webStats {
+                // Không hiện chuỗi ngày ở màn này (người dùng yêu cầu); chỉ còn mục tiêu hôm nay khi đã đăng nhập.
+                if web.isSignedIn, let webStats {
+                    Section {
                         WebStatsCard(stats: webStats)
-                    } else {
-                        streakCard
                     }
+                    .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 12, trailing: 16))
                 }
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 12, trailing: 16))
 
                 if !web.isSignedIn {
                     Section {
@@ -2171,59 +2170,13 @@ struct SparkBurst: View {
 }
 
 
-// MARK: - Giống cột phải trên web: chuỗi ngày + mục tiêu hôm nay
+// MARK: - Giống cột phải trên web: mục tiêu hôm nay
 
 struct WebStatsCard: View {
     let stats: WebConversationAPI.Stats
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                FlameView(size: 26, isLit: stats.streak > 0)
-                HStack(alignment: .firstTextBaseline, spacing: 6) {
-                    Text("\(stats.streak)")
-                        .font(.system(size: 34, weight: .heavy, design: .rounded))
-                        .contentTransition(.numericText())
-                    Text("ngày liên tiếp")
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                VStack(alignment: .trailing, spacing: 0) {
-                    Text("\(stats.totalSentences)")
-                        .font(.headline.weight(.heavy))
-                        .contentTransition(.numericText())
-                    Text("tổng câu").font(.caption2).foregroundStyle(.secondary)
-                }
-            }
-
-            if let week = stats.week, week.count == 7 {
-                HStack(spacing: 0) {
-                    ForEach(Array(week.enumerated()), id: \.offset) { _, day in
-                        VStack(spacing: 6) {
-                            Text(day.label)
-                                .font(.caption2.weight(.medium))
-                                .foregroundStyle(day.today ? brandRed : .secondary)
-                            ZStack {
-                                Circle()
-                                    .fill(day.done ? Color.orange : Color(.tertiarySystemFill))
-                                    .frame(width: 30, height: 30)
-                                if day.done {
-                                    Image(systemName: "checkmark")
-                                        .font(.system(size: 13, weight: .heavy))
-                                        .foregroundStyle(.white)
-                                }
-                                if day.today {
-                                    Circle().strokeBorder(brandRed, lineWidth: 2).frame(width: 34, height: 34)
-                                }
-                            }
-                            .opacity(day.future ? 0.5 : 1)
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                }
-            }
-
-            Divider()
             Text("Mục tiêu hôm nay")
                 .font(.subheadline.weight(.bold))
             goal("🗣️", "Nói \(WebConversationAPI.Stats.sentenceGoal) câu",
