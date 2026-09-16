@@ -944,7 +944,7 @@ struct RoomChatView: View {
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                                     .fill(socialRed.opacity(highlightedID == message.id ? 0.14 : 0))
                             )
-                            .modifier(SwipeToReply { startReply(message) })
+                            .modifier(SwipeToReply(enabled: message.system == nil) { startReply(message) })
                             .id(message.id)
                     }
 
@@ -1332,7 +1332,9 @@ struct RoomChatView: View {
 
     @ViewBuilder
     private func bubble(_ message: RoomMessage, online: Bool) -> some View {
-        if let gift = message.gift {
+        if let system = message.system {
+            SystemMessagePill(message: message, system: system)
+        } else if let gift = message.gift {
             GiftMessagePill(message: message, gift: gift) {
                 giftCenter.enqueue(message)
             }
@@ -2333,6 +2335,7 @@ private struct RoomTranscriptView: View {
 
 /// Vuốt sang phải một tin để trả lời: lộ biểu tượng ↩, rung nhẹ khi qua ngưỡng.
 private struct SwipeToReply: ViewModifier {
+    var enabled = true
     let onReply: () -> Void
 
     @State private var offset: CGFloat = 0
@@ -2341,7 +2344,16 @@ private struct SwipeToReply: ViewModifier {
 
     private let threshold: CGFloat = 64
 
+    @ViewBuilder
     func body(content: Content) -> some View {
+        if enabled {
+            swipeable(content)
+        } else {
+            content
+        }
+    }
+
+    private func swipeable(_ content: Content) -> some View {
         content
             .offset(x: offset)
             .background(alignment: .leading) {
@@ -2470,5 +2482,69 @@ enum RoomChatPrefs {
     static var handsFree: Bool {
         get { values["handsFree"] ?? false }
         set { values["handsFree"] = newValue }
+    }
+}
+
+// MARK: - Tin hệ thống (vào / rời phòng)
+
+/// Viên nhỏ giữa màn hình: "👋 Lan đã tham gia phòng · 14:05" (xanh nhạt) hoặc "🚪 … đã rời phòng" (xám).
+/// Không có nút trả lời / dịch / xoá.
+private struct SystemMessagePill: View {
+    let message: RoomMessage
+    let system: RoomMessage.SystemInfo
+
+    @State private var visible: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(message: RoomMessage, system: RoomMessage.SystemInfo) {
+        self.message = message
+        self.system = system
+        // Tin vừa đến (≤ 30 giây) thì hiện dần; tin cũ hiện ngay.
+        let recent = SocialFormat.date(message.createdAt).map { Date().timeIntervalSince($0) < 30 } ?? false
+        _visible = State(initialValue: !recent)
+    }
+
+    private var action: String {
+        if !system.text.isEmpty { return system.text }
+        if !message.text.isEmpty { return message.text }
+        return system.isJoin ? "đã tham gia phòng" : "đã rời phòng"
+    }
+
+    var body: some View {
+        let name = message.mine ? "Bạn" : message.user.name
+        let time = SocialFormat.time(message.createdAt)
+        HStack(spacing: 4) {
+            Text(system.isJoin ? "👋" : "🚪")
+            NavigationLink(value: message.user.socialUser()) {
+                Text(name)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(system.isJoin ? Color(red: 0.1, green: 0.5, blue: 0.22) : Color.primary)
+                    .lineLimit(1)
+            }
+            .buttonStyle(.plain)
+            Text(action)
+                .lineLimit(1)
+            if !time.isEmpty {
+                Text("· \(time)")
+                    .foregroundStyle(.tertiary)
+                    .fixedSize()
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .background(
+            Capsule().fill(system.isJoin ? onlineGreen.opacity(0.14) : Color(.tertiarySystemFill))
+        )
+        .frame(maxWidth: .infinity)
+        .opacity(visible ? 1 : 0)
+        .offset(y: visible || reduceMotion ? 0 : 8)
+        .onAppear {
+            guard !visible else { return }
+            withAnimation(.easeOut(duration: 0.35)) { visible = true }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(name) \(action)\(time.isEmpty ? "" : ", \(time)")")
     }
 }

@@ -315,6 +315,24 @@ struct RoomMessage: Codable, Identifiable, Hashable {
     var replyTo: ReplyRef?
     /// Tin tặng quà (chữ rỗng).
     var gift: RoomGift?
+    /// Tin hệ thống: ai đó vào / rời phòng.
+    var system: SystemInfo?
+
+    struct SystemInfo: Codable, Hashable {
+        /// "join" | "leave"
+        var type: String = ""
+        var text: String = ""
+
+        var isJoin: Bool { type == "join" }
+
+        enum CodingKeys: String, CodingKey { case type, text }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            type = (try? c.decodeIfPresent(String.self, forKey: .type)) ?? ""
+            text = (try? c.decodeIfPresent(String.self, forKey: .text)) ?? ""
+        }
+    }
 
     /// Trích dẫn tin được trả lời.
     struct ReplyRef: Codable, Hashable {
@@ -338,7 +356,7 @@ struct RoomMessage: Codable, Identifiable, Hashable {
         }
     }
 
-    enum CodingKeys: String, CodingKey { case id, text, createdAt, mine, user, image, replyTo, gift }
+    enum CodingKeys: String, CodingKey { case id, text, createdAt, mine, user, image, replyTo, gift, system }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -350,6 +368,7 @@ struct RoomMessage: Codable, Identifiable, Hashable {
         image = try? c.decodeIfPresent(SocialImage.self, forKey: .image)
         replyTo = try? c.decodeIfPresent(ReplyRef.self, forKey: .replyTo)
         gift = try? c.decodeIfPresent(RoomGift.self, forKey: .gift)
+        system = try? c.decodeIfPresent(SystemInfo.self, forKey: .system)
     }
 }
 
