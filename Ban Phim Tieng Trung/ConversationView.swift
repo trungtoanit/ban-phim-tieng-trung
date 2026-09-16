@@ -757,6 +757,14 @@ struct ConversationView: View {
                             bubble(message)
                                 .id(message.id)
                         }
+                        // "Bạn có thể nói": khối riêng dưới câu mới nhất của AI (không nằm trong bong bóng).
+                        // Chỉ gợi ý cho câu mới nhất; gợi ý của lượt cũ không còn hợp cảnh.
+                        if let last = session.messages.last, last.speaker == .partner, !last.hints.isEmpty,
+                           !session.isThinking {
+                            hintSection(last)
+                                .id("hints")
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
                         if session.isThinking {
                             thinkingBubble
                                 .id("thinking")
@@ -1108,10 +1116,6 @@ struct ConversationView: View {
                         slowButton(message.line)
                         speakButton(message.line, thenListen: session.messages.last?.id == message.id)
                     }
-                    // Chỉ gợi ý cho câu mới nhất; gợi ý của lượt cũ không còn hợp cảnh.
-                    if session.messages.last?.id == message.id, !message.hints.isEmpty {
-                        hintSection(message)
-                    }
                 }
                 .padding(12)
                 .background(RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -1216,10 +1220,10 @@ struct ConversationView: View {
     @ViewBuilder
     private func hintSection(_ message: AIConversationSession.Message) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("BẠN CÓ THỂ NÓI")
-                .font(.caption2.weight(.bold))
-                .kerning(0.6)
+            Label("Bạn có thể nói", systemImage: "lightbulb")
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(alignment: .top, spacing: 10) {
                     ForEach(Array(message.hints.enumerated()), id: \.offset) { _, hint in
@@ -1242,16 +1246,20 @@ struct ConversationView: View {
                             .padding(.vertical, 9)
                             .frame(maxWidth: 260, alignment: .leading)
                             // Giao dien phang: nen nhat, khong vien day / bong 3D
-                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color(.tertiarySystemFill)))
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color(.secondarySystemGroupedBackground)))
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Gợi ý: \(hint.zh), \(hint.vi)")
                     }
                 }
+                .padding(.horizontal, 16)
                 .padding(.bottom, 3)
             }
         }
+        // Tràn hết bề ngang màn hình để cuộn ngang tự nhiên
+        .padding(.horizontal, -16)
+        .padding(.top, 2)
     }
 
     private var thinkingBubble: some View {
