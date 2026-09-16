@@ -1067,53 +1067,48 @@ struct ConversationView: View {
             .fill(message.retried ? Color.green.opacity(0.08) : Color.red.opacity(0.07)))
     }
 
-    /// Bí thì xem vài câu có thể nói tiếp — nghe thử rồi tự nói lại bằng miệng mình.
+    /// "Bạn có thể nói" giống web: thẻ gợi ý luôn hiện dưới câu mới nhất của AI.
+    /// Chạm thẻ: đọc lên và điền vào ô gõ để sửa rồi gửi; hoặc nói lại bằng micro.
     @ViewBuilder
     private func hintSection(_ message: AIConversationSession.Message) -> some View {
-        if revealedHints.contains(message.id) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Bạn có thể nói:")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                ForEach(Array(message.hints.enumerated()), id: \.offset) { _, hint in
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(alignment: .top) {
-                            ruby(hint, size: 15)
-                            Spacer(minLength: 4)
-                            Button {
-                                // Giống web: chạm gợi ý thì đọc lên và điền vào ô để sửa rồi gửi.
-                                draft = hint.zh
-                                session.isTextMode = true
-                                session.speak(hint)
-                            } label: {
-                                Image(systemName: "square.and.pencil")
-                                    .foregroundStyle(brandRed)
+        VStack(alignment: .leading, spacing: 8) {
+            Text("BẠN CÓ THỂ NÓI")
+                .font(.caption2.weight(.bold))
+                .kerning(0.6)
+                .foregroundStyle(.secondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 10) {
+                    ForEach(Array(message.hints.enumerated()), id: \.offset) { _, hint in
+                        Button {
+                            draft = hint.zh
+                            session.speak(hint)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                RubyText(words: hint.words, hanziSize: 16, showHanViet: showHanViet)
+                                    .allowsHitTesting(false)
+                                if !hint.vi.isEmpty {
+                                    Text(hint.vi)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .multilineTextAlignment(.leading)
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
                             }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("Dùng câu gợi ý này")
-                            speakButton(hint)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 9)
+                            .frame(maxWidth: 240, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(Color(.systemBackground)))
+                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(Color(.separator), lineWidth: 2))
+                            .shadow(color: Color(.separator), radius: 0, y: 2)
                         }
-                        if !hint.vi.isEmpty {
-                            Text(hint.vi)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Gợi ý: \(hint.zh), \(hint.vi)")
                     }
                 }
+                .padding(.bottom, 3)
             }
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color.orange.opacity(0.10)))
-        } else {
-            Button {
-                revealedHints.insert(message.id)
-            } label: {
-                Label("Bí quá, gợi ý đi", systemImage: "lightbulb.fill")
-            }
-            .font(.caption)
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .tint(.orange)
         }
     }
 

@@ -76,6 +76,31 @@ struct ChatRoom: Codable, Identifiable, Hashable {
     var joined: Bool
     var isOwner: Bool
     var createdAt: String
+    /// Số người đang mở phòng (hỏi tin trong 20 giây qua). Máy chủ cũ không có thì 0.
+    var onlineCount: Int = 0
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, description, emoji, ownerId, ownerName, memberCount, messageCount
+        case lastMessage, lastMessageAt, joined, isOwner, createdAt, onlineCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+        emoji = try c.decodeIfPresent(String.self, forKey: .emoji) ?? "💬"
+        ownerId = try c.decode(Int.self, forKey: .ownerId)
+        ownerName = try c.decodeIfPresent(String.self, forKey: .ownerName) ?? ""
+        memberCount = try c.decodeIfPresent(Int.self, forKey: .memberCount) ?? 0
+        messageCount = try c.decodeIfPresent(Int.self, forKey: .messageCount) ?? 0
+        lastMessage = try c.decodeIfPresent(String.self, forKey: .lastMessage)
+        lastMessageAt = try c.decodeIfPresent(String.self, forKey: .lastMessageAt)
+        joined = try c.decodeIfPresent(Bool.self, forKey: .joined) ?? false
+        isOwner = try c.decodeIfPresent(Bool.self, forKey: .isOwner) ?? false
+        createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt) ?? ""
+        onlineCount = try c.decodeIfPresent(Int.self, forKey: .onlineCount) ?? 0
+    }
 }
 
 struct RoomMessage: Codable, Identifiable, Hashable {
@@ -102,6 +127,14 @@ struct RoomPage {
     let messages: [RoomMessage]
     let deletedIds: [Int]
     let hasMore: Bool
+    /// Những người đang trong phòng (người xem đứng đầu). nil nếu máy chủ chưa hỗ trợ.
+    let online: [RoomMessage.User]?
+}
+
+/// Số người đang trong phòng chat: tổng (không trùng) và theo từng phòng.
+struct RoomsOnline {
+    let total: Int
+    let rooms: [Int: Int]
 }
 
 enum SocialAPI {
@@ -124,6 +157,20 @@ enum SocialAPI {
         let deletedIds: [Int]?
         let hasMore: Bool?
         let message: RoomMessage?
+        let online: [RoomMessage.User]?
+    }
+
+    /// Phần chung của mọi phản hồi, đọc trước để báo lỗi / hết phiên.
+    private struct Status: Decodable {
+        let ok: Bool
+        let error: String?
+        let login: Bool?
+    }
+
+    /// action=online: `rooms` là bảng {"roomId": n}, khác kiểu với danh sách phòng.
+    private struct OnlineEnvelope: Decodable {
+        let total: Int?
+        let rooms: [String: Int]?
     }
 
     // MARK: Bạn bè
@@ -166,7 +213,23 @@ enum SocialAPI {
         if before > 0 { params["before"] = before }
         let e = try await call("room", params, method: "GET")
         guard let room = e.room else { throw missing }
-        return RoomPage(room: room, messages: e.messages ?? [], deletedIds: e.deletedIds ?? [], hasMore: e.hasMore ?? false)
+        return RoomPage(room: room, messages: e.messages ?? [], deletedIds: e.deletedIds ?? [], hasMore: e.hasMore ?? false, online: e.online)
+    }
+
+    /// Tổng số người đang trong phòng chat (mọi phòng).
+    static func online() async throws -> RoomsOnline {
+        let data = try await request("online", method: "GET")
+        let e = (try? JSONDecoder().decode(OnlineEnvelope.self, from: data))
+        var rooms: [Int: Int] = [:]
+        for (key, value) in e?.rooms ?? [:] {
+            if let id = Int(key) { rooms[id] = value }
+        }
+        return RoomsOnline(total: e?.total ?? 0, rooms: rooms)
+    }
+
+    /// Rời màn phòng: bỏ trạng thái đang online ngay thay vì đợi 20 giây.
+    static func roomAway(id: Int) async throws {
+        _ = try await request("room_away", ["id": id])
     }
 
     static func createRoom(name: String, description: String, emoji: String) async throws -> ChatRoom {
@@ -202,6 +265,15 @@ enum SocialAPI {
     private static var missing: WebBackendError { WebBackendError(message: "Máy chủ trả về dữ liệu lỗi. Hãy thử lại sau.") }
 
     private static func call(_ action: String, _ payload: [String: Any] = [:], method: String = "POST") async throws -> Envelope {
+        let data = try await request(action, payload, method: method)
+        guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else {
+            throw WebBackendError(message: "Máy chủ trả về dữ liệu lỗi. Hãy thử lại sau.")
+        }
+        return envelope
+    }
+
+    /// Gửi yêu cầu, kiểm tra ok / hết phiên, trả về dữ liệu thô để từng action tự đọc.
+    private static func request(_ action: String, _ payload: [String: Any] = [:], method: String = "POST") async throws -> Data {
         guard let token = WebAccountStore.shared.token else {
             throw WebBackendError(message: "Hãy đăng nhập để dùng Bạn bè và Phòng chat.", needsLogin: true)
         }
@@ -232,7 +304,7 @@ enum SocialAPI {
             if error is CancellationError || (error as? URLError)?.code == .cancelled { throw CancellationError() }
             throw WebBackendError(message: "Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.")
         }
-        guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else {
+        guard let envelope = try? JSONDecoder().decode(Status.self, from: data) else {
             throw WebBackendError(message: "Máy chủ trả về dữ liệu lỗi. Hãy thử lại sau.")
         }
         if envelope.login == true {
@@ -242,7 +314,7 @@ enum SocialAPI {
         guard envelope.ok else {
             throw WebBackendError(message: envelope.error ?? "Có lỗi xảy ra. Hãy thử lại.")
         }
-        return envelope
+        return data
     }
 }
 

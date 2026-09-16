@@ -35,9 +35,11 @@ struct ContentView: View {
     @AppStorage(StreakStore.goalKey, store: SharedSettings.store)
     private var dailyGoal = StreakStore.defaultGoal
     @Environment(\.scenePhase) private var scenePhase
+    /// Số người đang trong phòng chat, hiện thành số trên icon Phòng chat (chỉ khi đã đăng nhập).
+    @State private var roomsOnline = 0
 
     private var badges: [AppTab: Int] {
-        [.conversation: streak.remaining, .mistakes: mistakes.mistakes.count]
+        [.conversation: streak.remaining, .mistakes: mistakes.mistakes.count, .rooms: roomsOnline]
     }
 
     var body: some View {
@@ -62,8 +64,10 @@ struct ContentView: View {
             }
             .animation(.spring(response: 0.42, dampingFraction: 0.86), value: tab)
         }
+        .task { await refreshRoomsOnline() }
         .onChange(of: tab) { open in
             if open == nil {
+                Task { await refreshRoomsOnline() }
                 // Hiện lại ngay (không hiệu ứng) để tính năng thu về đúng icon trên màn hình chính.
                 var transaction = Transaction()
                 transaction.disablesAnimations = true
@@ -79,6 +83,7 @@ struct ContentView: View {
         .onChange(of: scenePhase) { phase in
             guard phase == .active else { return }
             mistakes.reload()
+            Task { await refreshRoomsOnline() }
             // Mở lại app sang ngày mới thì đếm lại từ đầu mục tiêu.
             refreshStreak()
         }
@@ -90,6 +95,15 @@ struct ContentView: View {
             refreshStreak()
         }
         .onChange(of: dailyGoal) { _ in refreshStreak() }
+    }
+
+    /// Hỏi một lần khi về màn hình chính / mở lại app, không hỏi định kỳ.
+    private func refreshRoomsOnline() async {
+        guard WebAccountStore.shared.isSignedIn else {
+            roomsOnline = 0
+            return
+        }
+        if let online = try? await SocialAPI.online() { roomsOnline = online.total }
     }
 
     @ViewBuilder

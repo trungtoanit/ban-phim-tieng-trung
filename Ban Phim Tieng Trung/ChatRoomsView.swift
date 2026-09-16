@@ -33,18 +33,26 @@ final class RoomsListModel: ObservableObject {
     @Published var rooms: [ChatRoom] = []
     @Published var loaded = false
     @Published var errorMessage: String?
+    /// Tổng số người đang trong phòng chat (mọi phòng).
+    @Published var onlineTotal = 0
 
     var joined: [ChatRoom] { rooms.filter(\.joined) }
     var explore: [ChatRoom] { rooms.filter { !$0.joined } }
 
-    func load(query: String = "") async {
+    /// `silent`: làm mới ngầm định kỳ, lỗi mạng tạm thời thì không báo.
+    func load(query: String = "", silent: Bool = false) async {
         do {
             rooms = try await SocialAPI.rooms(query: query)
             loaded = true
         } catch is CancellationError {
         } catch {
-            errorMessage = error.localizedDescription
+            if !silent { errorMessage = error.localizedDescription }
         }
+    }
+
+    func loadOnline() async {
+        guard let online = try? await SocialAPI.online() else { return }
+        onlineTotal = online.total
     }
 
     /// Cập nhật một phòng vừa đổi (tham gia / rời / tin mới) mà không tải lại cả danh sách.
@@ -70,6 +78,16 @@ private struct RoomsListView: View {
     var body: some View {
         NavigationStack(path: $path) {
             List {
+                if model.onlineTotal > 0 {
+                    Section {
+                        HStack(spacing: 8) {
+                            OnlineDot(size: 9)
+                            Text("\(model.onlineTotal) người đang trong phòng chat")
+                                .font(.subheadline.weight(.medium))
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
                 if model.loaded, model.rooms.isEmpty {
                     Section {
                         VStack(spacing: 8) {
@@ -126,7 +144,20 @@ private struct RoomsListView: View {
                 }
                 await model.load(query: query)
             }
-            .refreshable { await model.load(query: query) }
+            // Số người đang online thay đổi liên tục: làm mới danh sách + tổng mỗi 10 giây khi đang xem.
+            .task(id: query) {
+                await model.loadOnline()
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 10_000_000_000)
+                    guard !Task.isCancelled else { break }
+                    await model.load(query: query, silent: true)
+                    await model.loadOnline()
+                }
+            }
+            .refreshable {
+                await model.load(query: query)
+                await model.loadOnline()
+            }
             .navigationDestination(for: ChatRoom.self) { room in
                 RoomChatView(room: room,
                              onUpdate: { model.update($0) },
@@ -178,6 +209,14 @@ private struct RoomRow: View {
                 Text("👥 \(room.memberCount)")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
+                if room.onlineCount > 0 {
+                    HStack(spacing: 4) {
+                        OnlineDot(size: 7)
+                        Text("\(room.onlineCount) đang online")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(onlineGreen)
+                    }
+                }
                 if let time = room.lastMessageAt, !SocialFormat.time(time).isEmpty {
                     Text(SocialFormat.time(time))
                         .font(.caption2)
@@ -191,6 +230,20 @@ private struct RoomRow: View {
     private var preview: String {
         if let last = room.lastMessage, !last.isEmpty { return last }
         return room.description.isEmpty ? "Chưa có tin nhắn" : room.description
+    }
+}
+
+/// Màu xanh chuẩn cho trạng thái đang online.
+private let onlineGreen = Color(red: 0.2, green: 0.72, blue: 0.35)
+
+private struct OnlineDot: View {
+    var size: CGFloat = 8
+
+    var body: some View {
+        Circle()
+            .fill(onlineGreen)
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
     }
 }
 
@@ -331,6 +384,11 @@ final class RoomChatModel: ObservableObject {
     @Published var errorMessage: String?
     /// Phòng đã bị chủ phòng xoá.
     @Published var gone = false
+    /// Những người đang trong phòng (mình đứng đầu).
+    @Published var online: [RoomMessage.User] = []
+
+    /// Số người đang online: ưu tiên danh sách, máy chủ cũ không có thì dùng onlineCount.
+    var onlineCount: Int { max(room.onlineCount, online.count) }
 
     /// Pinyin của từng tin (tách từ tốn thời gian, không tính lại mỗi lần vẽ).
     private var wordsCache: [Int: [PinyinWord]] = [:]
@@ -353,6 +411,7 @@ final class RoomChatModel: ObservableObject {
         do {
             let page = try await SocialAPI.room(id: room.id)
             room = page.room
+            if let people = page.online { online = people }
             messages = page.messages
             hasMore = page.hasMore
             loaded = true
@@ -372,6 +431,7 @@ final class RoomChatModel: ObservableObject {
         do {
             let page = try await SocialAPI.room(id: room.id, after: messages.last?.id ?? 0)
             room = page.room
+            if let people = page.online, people != online { online = people }
             merge(page.messages)
             if !page.deletedIds.isEmpty {
                 let deleted = Set(page.deletedIds)
@@ -546,6 +606,7 @@ struct RoomChatView: View {
             }
         }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .safeAreaInset(edge: .top, spacing: 0) { onlineStrip }
         .safeAreaInset(edge: .bottom, spacing: 0) { composer }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -561,6 +622,11 @@ struct RoomChatView: View {
                 guard !Task.isCancelled else { break }
                 await model.poll()
             }
+        }
+        // Rời màn phòng thì báo máy chủ bỏ trạng thái đang online (không cần đợi kết quả).
+        .onDisappear {
+            let id = model.room.id
+            Task { try? await SocialAPI.roomAway(id: id) }
         }
         .onChange(of: model.room) { onUpdate($0) }
         .onChange(of: model.gone) { gone in
@@ -598,12 +664,58 @@ struct RoomChatView: View {
                 Text(model.room.name)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
-                Text("\(model.room.memberCount) thành viên")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 3) {
+                    Text("👥 \(model.room.memberCount) thành viên")
+                    if model.onlineCount > 0 {
+                        Text("·")
+                        OnlineDot(size: 6)
+                        Text("\(model.onlineCount) đang online")
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
             }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    /// Dải "Đang trong phòng": ảnh đại diện + tên những người đang mở phòng.
+    @ViewBuilder
+    private var onlineStrip: some View {
+        if !model.online.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 5) {
+                    OnlineDot(size: 7)
+                    Text("Đang trong phòng · \(model.online.count)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 14)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(Array(model.online.enumerated()), id: \.element.id) { index, user in
+                            VStack(spacing: 3) {
+                                SocialAvatar(url: user.avatarURL, initial: user.initial, size: 36)
+                                    .overlay(alignment: .bottomTrailing) {
+                                        OnlineDot(size: 10)
+                                            .overlay(Circle().strokeBorder(Color(.systemBackground), lineWidth: 2))
+                                    }
+                                Text(index == 0 ? "Bạn" : user.name)
+                                    .font(.caption2)
+                                    .lineLimit(1)
+                                    .frame(maxWidth: 56)
+                            }
+                            .accessibilityElement(children: .combine)
+                        }
+                    }
+                    .padding(.horizontal, 14)
+                }
+            }
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.bar)
+        }
     }
 
     private var menu: some View {
