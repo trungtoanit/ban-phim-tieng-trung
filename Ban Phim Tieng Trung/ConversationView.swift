@@ -695,7 +695,7 @@ struct ConversationView: View {
                     }
                     if let corrected = message.corrected {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Nói tự nhiên hơn:")
+                            Text(message.askedInVietnamese ? "Câu này nói thế này:" : "Nói tự nhiên hơn:")
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.green)
                             HStack(alignment: .top) {
@@ -879,7 +879,9 @@ struct ConversationView: View {
     /// Chữ đang nghe được, hiện ngay để người học biết máy có bắt được giọng mình không.
     private var listeningStrip: some View {
         LiveTranscriptView(text: session.transcript,
-                           placeholder: "Đang nghe… hãy nói bằng tiếng Trung",
+                           placeholder: session.isAskingInVietnamese
+                               ? "Đang nghe… nói bằng tiếng Việt câu bạn muốn nói"
+                               : "Đang nghe… hãy nói bằng tiếng Trung",
                            tint: brandRed,
                            hanziSize: 20)
     }
@@ -897,6 +899,23 @@ struct ConversationView: View {
             }
             .buttonStyle(.borderless)
             .accessibilityLabel("Gõ chữ thay vì nói")
+
+            Button {
+                session.askInVietnamese()
+            } label: {
+                VStack(spacing: 1) {
+                    Image(systemName: session.isAskingInVietnamese ? "stop.fill" : "mic.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("VI")
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .foregroundStyle(session.isAskingInVietnamese ? .white : Color.secondary)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(session.isAskingInVietnamese ? brandRed : Color(.secondarySystemFill)))
+            }
+            .buttonStyle(.borderless)
+            .disabled(session.isThinking)
+            .accessibilityLabel("Chưa biết nói tiếng Trung — nói tiếng Việt để được chỉ cách nói")
 
             Spacer(minLength: 0)
             micButton

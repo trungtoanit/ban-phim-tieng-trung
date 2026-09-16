@@ -632,6 +632,8 @@ final class AIConversationSession: ObservableObject {
         var retried = false
         /// Vài câu người học có thể nói tiếp sau câu này của AI.
         var hints: [ChatLine] = []
+        /// Người học nói bằng tiếng Việt vì chưa biết diễn đạt — `corrected` là câu tiếng Trung được chỉ.
+        var askedInVietnamese = false
 
         /// Những từ máy nghe không chắc — thường là chỗ phát âm chưa tới.
         var flaggedWords: [PinyinWord] { line.words.filter { $0.flagged == true } }
@@ -662,6 +664,9 @@ final class AIConversationSession: ObservableObject {
     @Published private(set) var savedToPractice = false
     /// Số lượt người học đã nói trong đoạn đang dở.
     @Published private(set) var savedTurns = 0
+
+    /// Micro đang mở để nghe người học nói tiếng Việt (nhờ chỉ cách nói).
+    @Published private(set) var isAskingInVietnamese = false
 
     var isListening: Bool { capture.isListening }
     /// Micro đang mở để nói câu mới với AI (không tính lúc đọc lại câu cũ).
@@ -842,6 +847,7 @@ final class AIConversationSession: ObservableObject {
         // Đang đọc dở thì để đọc xong, tránh micro thu lại tiếng của AI.
         guard !NaturalSpeaker.chinese.isSpeaking else { return }
         errorMessage = nil
+        finishVietnameseListening()
         // Khoảng chờ theo cài đặt "chờ khi bạn ngừng nói" của người dùng.
         capture.start(targets: []) { [weak self] heard in
             guard let self else { return }
@@ -854,6 +860,86 @@ final class AIConversationSession: ObservableObject {
 
     func stopListening() {
         capture.cancel()
+        finishVietnameseListening()
+    }
+
+    // MARK: - Chưa biết nói thì cứ nói tiếng Việt
+
+    /// Nghe người học nói tiếng Việt, rồi chỉ cho họ câu tiếng Trung tương ứng (đọc to luôn).
+    func askInVietnamese() {
+        guard !isThinking, drillingID == nil, !needsResumeChoice, !isFinished else { return }
+        if capture.isListening {
+            capture.finish()
+            return
+        }
+        NaturalSpeaker.all.forEach { $0.stop() }
+        errorMessage = nil
+        isAskingInVietnamese = true
+        capture.localeIdentifier = "vi-VN"
+        capture.start(targets: []) { [weak self] heard in
+            guard let self else { return }
+            self.finishVietnameseListening()
+            let text = heard.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return }
+            self.coach(vietnamese: text)
+        }
+    }
+
+    private func finishVietnameseListening() {
+        isAskingInVietnamese = false
+        capture.localeIdentifier = "zh-CN"
+    }
+
+    /// Hỏi AI: câu tiếng Việt này thì nói tiếng Trung thế nào trong tình huống đang nói dở.
+    func coach(vietnamese: String) {
+        let text = vietnamese.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isThinking else { return }
+
+        var message = Message(speaker: .user, line: ChatLine(zh: text, vi: "", words: [PinyinWord(zh: text, py: "")]))
+        message.askedInVietnamese = true
+        messages.append(message)
+        let messageID = message.id
+
+        let token = UUID()
+        requestToken = token
+        isThinking = true
+        canRetry = false
+        errorMessage = nil
+
+        let instructions = basePrompt() + """
+        The learner does not know how to say something in Chinese yet. They said it in Vietnamese: "\(text)".
+        Do NOT continue the conversation and do NOT answer them. Teach them the sentence instead:
+        - "zh": the natural Chinese sentence they should say right now in this scenario, at their level, short (at most 20 Chinese characters).
+        - "vi": the Vietnamese meaning of that Chinese sentence.
+        - "words": split "zh" into words in order; each item has the exact characters ("zh", punctuation attached to the preceding word) and its Hanyu Pinyin with tone marks ("py").
+        """
+        let input = history + [.init(role: .user, content: "(Người học chưa biết nói câu này bằng tiếng Trung: \"\(text)\")")]
+
+        Task {
+            do {
+                let line = try await OpenAIClient.respond(
+                    instructions: instructions, messages: input,
+                    schemaName: "coach_line", schema: AILine.schema, as: AILine.self
+                )
+                await MainActor.run { [weak self] in
+                    guard let self, self.requestToken == token else { return }
+                    self.isThinking = false
+                    let suggestion = line.chatLine
+                    guard !suggestion.zh.isEmpty, let index = self.messages.firstIndex(where: { $0.id == messageID }) else { return }
+                    self.messages[index].corrected = suggestion
+                    self.persist()
+                    // Chỉ cách nói bằng giọng, xong mở micro để người học nói theo.
+                    self.speak(suggestion, thenListen: self.handsFree)
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    guard let self, self.requestToken == token else { return }
+                    self.isThinking = false
+                    self.canRetry = false
+                    self.errorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     /// Câu đến từ đâu — chỉ câu nói ra mới tính vào chuỗi ngày luyện nói.
