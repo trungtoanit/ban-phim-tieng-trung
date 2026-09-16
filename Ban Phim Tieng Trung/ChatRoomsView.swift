@@ -4,6 +4,7 @@
 //  Dùng chung dữ liệu với phong-chat.php của website (api/social.php). Tin mới được hỏi lại mỗi 3 giây.
 //
 
+import Combine
 import SwiftUI
 
 struct ChatRoomsView: View {
@@ -71,7 +72,7 @@ final class RoomsListModel: ObservableObject {
 
 private struct RoomsListView: View {
     @StateObject private var model = RoomsListModel()
-    @State private var path: [ChatRoom] = []
+    @State private var path = NavigationPath()
     @State private var query = ""
     @State private var creating = false
 
@@ -163,6 +164,10 @@ private struct RoomsListView: View {
                              onUpdate: { model.update($0) },
                              onDeleted: { model.remove(id: room.id) })
             }
+            .navigationDestination(for: SocialUser.self) { user in
+                SocialProfileView(user: user)
+            }
+            .roomDestinations(onUpdate: { model.update($0) }, onDeleted: { model.remove(id: $0) })
             .sheet(isPresented: $creating) {
                 CreateRoomSheet { room in
                     model.update(room)
@@ -203,6 +208,10 @@ private struct RoomRow: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
+                if !room.members.isEmpty {
+                    RoomMemberStack(members: room.sortedMembers, total: room.memberCount)
+                        .padding(.top, 2)
+                }
             }
             Spacer(minLength: 6)
             VStack(alignment: .trailing, spacing: 4) {
@@ -233,17 +242,145 @@ private struct RoomRow: View {
     }
 }
 
-/// Màu xanh chuẩn cho trạng thái đang online.
-private let onlineGreen = Color(red: 0.2, green: 0.72, blue: 0.35)
+/// Chồng ảnh đại diện thành viên (chủ phòng đầu tiên có 👑, chấm xanh người đang online, "+N").
+private struct RoomMemberStack: View {
+    let members: [RoomMember]
+    let total: Int
+    var size: CGFloat = 22
 
-private struct OnlineDot: View {
-    var size: CGFloat = 8
+    private let ring = Color(.secondarySystemGroupedBackground)
 
     var body: some View {
-        Circle()
-            .fill(onlineGreen)
-            .frame(width: size, height: size)
-            .accessibilityHidden(true)
+        let shown = Array(members.prefix(5))
+        HStack(spacing: -size * 0.3) {
+            ForEach(Array(shown.enumerated()), id: \.element.id) { index, member in
+                SocialAvatar(url: member.avatarURL, initial: member.initial, size: size, online: member.online, ring: ring)
+                    .background(Circle().fill(ring).padding(-1.5))
+                    .overlay(alignment: .top) {
+                        if member.isOwner {
+                            Text("👑")
+                                .font(.system(size: size * 0.45))
+                                .offset(y: -size * 0.38)
+                        }
+                    }
+                    .zIndex(Double(shown.count - index))
+            }
+            if total > shown.count {
+                Text("+\(total - shown.count)")
+                    .font(.system(size: size * 0.42, weight: .bold, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .frame(minWidth: size, minHeight: size)
+                    .background(Capsule().fill(Color(.tertiarySystemFill)))
+                    .background(Capsule().fill(ring).padding(-1.5))
+            }
+        }
+        .padding(.top, size * 0.3)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(total) thành viên")
+    }
+}
+
+// MARK: - Điều hướng dùng chung (phòng từ tường, danh sách thành viên)
+
+struct RoomMembersRoute: Hashable {
+    let room: ChatRoom
+}
+
+extension View {
+    /// Mở phòng từ tường (`WallRoom`) và trang thành viên phòng. Gắn ở gốc mỗi NavigationStack.
+    func roomDestinations(onUpdate: @escaping (ChatRoom) -> Void = { _ in },
+                          onDeleted: @escaping (Int) -> Void = { _ in }) -> some View {
+        self
+            .navigationDestination(for: WallRoom.self) { wallRoom in
+                RoomChatView(room: ChatRoom(placeholder: wallRoom), onUpdate: onUpdate, onDeleted: { onDeleted(wallRoom.id) })
+            }
+            .navigationDestination(for: RoomMembersRoute.self) { route in
+                RoomMembersView(room: route.room)
+            }
+    }
+}
+
+/// Toàn bộ thành viên phòng: chủ phòng 👑 đầu tiên, người đang online có chấm xanh. Chạm để xem tường.
+struct RoomMembersView: View {
+    @State private var room: ChatRoom
+
+    init(room: ChatRoom) {
+        _room = State(initialValue: room)
+    }
+
+    private var members: [RoomMember] {
+        var list = room.sortedMembers
+        // Máy chủ cũ chưa gửi danh sách: ít nhất hiện chủ phòng.
+        if list.isEmpty, room.ownerId > 0 {
+            list = [RoomMember(id: room.ownerId, name: room.owner?.name ?? room.ownerName,
+                               username: room.owner?.username, avatar: room.owner?.avatar, isOwner: true)]
+        }
+        return list
+    }
+
+    var body: some View {
+        List {
+            Section {
+                ForEach(members) { member in
+                    NavigationLink(value: member.socialUser) {
+                        HStack(spacing: 12) {
+                            SocialAvatar(url: member.avatarURL, initial: member.initial, size: 42, online: member.online,
+                                         ring: Color(.secondarySystemGroupedBackground))
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 4) {
+                                    Text(member.name)
+                                        .font(.subheadline.weight(.semibold))
+                                        .lineLimit(1)
+                                    if member.isOwner { Text("👑").font(.caption) }
+                                }
+                                HStack(spacing: 6) {
+                                    if member.isOwner {
+                                        Text("Chủ phòng")
+                                            .font(.system(size: 10, weight: .bold))
+                                            .foregroundStyle(socialRed)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Capsule().fill(socialRed.opacity(0.12)))
+                                    }
+                                    if member.online {
+                                        Text("đang online")
+                                            .font(.caption)
+                                            .foregroundStyle(onlineGreen)
+                                    } else if let username = member.username {
+                                        Text("@\(username)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .lineLimit(1)
+                                    }
+                                }
+                            }
+                        }
+                        .padding(.vertical, 2)
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+            } header: {
+                Text("Thành viên (\(max(room.memberCount, members.count)))")
+            } footer: {
+                if room.memberCount > members.count {
+                    Text("Đang hiện \(members.count)/\(room.memberCount) thành viên.")
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+        .navigationTitle("\(room.emoji) \(room.name)")
+        .navigationBarTitleDisplayMode(.inline)
+        .tint(socialRed)
+        .refreshable { await reload() }
+        .task { await reload() }
+    }
+
+    private func reload() async {
+        // after = rất lớn: chỉ lấy thông tin phòng + thành viên, không kéo tin nhắn.
+        if let page = try? await SocialAPI.room(id: room.id, after: Int(Int32.max)) {
+            room = page.room
+        }
     }
 }
 
@@ -390,6 +527,11 @@ final class RoomChatModel: ObservableObject {
     /// Số người đang online: ưu tiên danh sách, máy chủ cũ không có thì dùng onlineCount.
     var onlineCount: Int { max(room.onlineCount, online.count) }
 
+    /// Id những người đang trong phòng (danh sách online + thành viên có chấm xanh).
+    var onlineIDs: Set<Int> {
+        Set(online.map(\.id)).union(room.members.filter(\.online).map(\.id))
+    }
+
     /// Pinyin của từng tin (tách từ tốn thời gian, không tính lại mỗi lần vẽ).
     private var wordsCache: [Int: [PinyinWord]] = [:]
 
@@ -529,11 +671,13 @@ struct RoomChatView: View {
     let onDeleted: () -> Void
 
     @StateObject private var model: RoomChatModel
+    /// Micro của ô soạn tin. Giữ bằng @State (không theo dõi) để mức âm lượng micro đổi liên tục
+    /// chỉ vẽ lại ô soạn tin, không vẽ lại cả danh sách tin nhắn.
+    @State private var voice = RoomVoiceModel()
     @Environment(\.dismiss) private var dismiss
-    @State private var draft = ""
     @State private var confirmDelete = false
     @State private var selectedWord: SelectedWord?
-    @FocusState private var composerFocused: Bool
+    @State private var composerFocused = false
     @AppStorage(SharedSettings.showHanVietKey, store: SharedSettings.store) private var showHanViet = false
 
     private static let bottomID = "room-bottom"
@@ -577,8 +721,9 @@ struct RoomChatView: View {
                         .padding(.top, 60)
                     }
 
+                    let onlineIDs = model.onlineIDs
                     ForEach(model.messages) { message in
-                        bubble(message)
+                        bubble(message, online: onlineIDs.contains(message.user.id))
                             .id(message.id)
                     }
 
@@ -607,7 +752,9 @@ struct RoomChatView: View {
         }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .safeAreaInset(edge: .top, spacing: 0) { onlineStrip }
-        .safeAreaInset(edge: .bottom, spacing: 0) { composer }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            RoomComposer(model: model, voice: voice, focused: $composerFocused)
+        }
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .principal) { header }
@@ -623,8 +770,13 @@ struct RoomChatView: View {
                 await model.poll()
             }
         }
-        // Rời màn phòng thì báo máy chủ bỏ trạng thái đang online (không cần đợi kết quả).
+        .onAppear {
+            voice.activate { [model] text in await model.send(text) }
+            voice.onError = { [model] message in model.errorMessage = message }
+        }
+        // Rời màn phòng thì báo máy chủ bỏ trạng thái đang online (không cần đợi kết quả), tắt micro / rảnh tay.
         .onDisappear {
+            voice.deactivate()
             let id = model.room.id
             Task { try? await SocialAPI.roomAway(id: id) }
         }
@@ -657,59 +809,91 @@ struct RoomChatView: View {
 
     // MARK: Thanh tiêu đề
 
-    private var header: some View {
-        HStack(spacing: 8) {
-            Text(model.room.emoji).font(.title3)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(model.room.name)
-                    .font(.subheadline.weight(.semibold))
-                    .lineLimit(1)
-                HStack(spacing: 3) {
-                    Text("👥 \(model.room.memberCount) thành viên")
-                    if model.onlineCount > 0 {
-                        Text("·")
-                        OnlineDot(size: 6)
-                        Text("\(model.onlineCount) đang online")
-                    }
-                }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-            }
-        }
-        .accessibilityElement(children: .combine)
+    private var ownerName: String {
+        model.room.owner?.name ?? model.room.ownerName
     }
 
-    /// Dải "Đang trong phòng": ảnh đại diện + tên những người đang mở phòng.
+    /// Chạm vào tiêu đề để xem toàn bộ thành viên.
+    private var header: some View {
+        NavigationLink(value: RoomMembersRoute(room: model.room)) {
+            HStack(spacing: 8) {
+                Text(model.room.emoji).font(.title3)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(model.room.name)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    HStack(spacing: 3) {
+                        if !ownerName.isEmpty {
+                            Text("👑 \(ownerName)")
+                            Text("·")
+                        }
+                        Text("👥 \(model.room.memberCount)")
+                        if model.onlineCount > 0 {
+                            Text("·")
+                            OnlineDot(size: 6)
+                            Text("\(model.onlineCount) online")
+                        }
+                    }
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Xem thành viên")
+    }
+
+    /// Dải "Đang trong phòng": ảnh đại diện + tên những người đang mở phòng; nút xem đủ thành viên.
     @ViewBuilder
     private var onlineStrip: some View {
-        if !model.online.isEmpty {
+        if model.loaded, !model.online.isEmpty || model.room.memberCount > 0 {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 5) {
                     OnlineDot(size: 7)
                     Text("Đang trong phòng · \(model.online.count)")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    NavigationLink(value: RoomMembersRoute(room: model.room)) {
+                        HStack(spacing: 3) {
+                            Text("Thành viên (\(model.room.memberCount))")
+                            Image(systemName: "chevron.right")
+                        }
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(socialRed)
+                    }
+                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 14)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(Array(model.online.enumerated()), id: \.element.id) { index, user in
-                            VStack(spacing: 3) {
-                                SocialAvatar(url: user.avatarURL, initial: user.initial, size: 36)
-                                    .overlay(alignment: .bottomTrailing) {
-                                        OnlineDot(size: 10)
-                                            .overlay(Circle().strokeBorder(Color(.systemBackground), lineWidth: 2))
+                if !model.online.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(Array(model.online.enumerated()), id: \.element.id) { index, user in
+                                NavigationLink(value: user.socialUser(online: true)) {
+                                    VStack(spacing: 3) {
+                                        SocialAvatar(url: user.avatarURL, initial: user.initial, size: 36, online: true)
+                                            .overlay(alignment: .top) {
+                                                if user.id == model.room.ownerId {
+                                                    Text("👑").font(.system(size: 12)).offset(y: -9)
+                                                }
+                                            }
+                                        Text(index == 0 ? "Bạn" : user.name)
+                                            .font(.caption2)
+                                            .foregroundStyle(.primary)
+                                            .lineLimit(1)
+                                            .frame(maxWidth: 56)
                                     }
-                                Text(index == 0 ? "Bạn" : user.name)
-                                    .font(.caption2)
-                                    .lineLimit(1)
-                                    .frame(maxWidth: 56)
+                                    .padding(.top, 4)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityElement(children: .combine)
                             }
-                            .accessibilityElement(children: .combine)
                         }
+                        .padding(.horizontal, 14)
                     }
-                    .padding(.horizontal, 14)
                 }
             }
             .padding(.vertical, 8)
@@ -735,7 +919,7 @@ struct RoomChatView: View {
                     Label("Tham gia", systemImage: "person.badge.plus")
                 }
             }
-            Section("Chủ phòng: \(model.room.ownerName)") {
+            Section("Chủ phòng: 👑 \(ownerName)") {
                 if model.room.isOwner {
                     Button(role: .destructive) {
                         confirmDelete = true
@@ -752,24 +936,43 @@ struct RoomChatView: View {
     // MARK: Tin nhắn
 
     @ViewBuilder
-    private func bubble(_ message: RoomMessage) -> some View {
+    private func bubble(_ message: RoomMessage, online: Bool) -> some View {
         let canDelete = message.mine || model.room.isOwner
+        let isOwner = message.user.id == model.room.ownerId
+        let hasHan = ChineseText.containsHan(message.text)
         HStack(alignment: .top, spacing: 8) {
             if message.mine {
                 Spacer(minLength: 48)
             } else {
-                SocialAvatar(url: message.user.avatarURL, initial: message.user.initial, size: 32)
+                NavigationLink(value: message.user.socialUser(online: online)) {
+                    SocialAvatar(url: message.user.avatarURL, initial: message.user.initial, size: 32, online: online,
+                                 ring: Color(.systemGroupedBackground))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Xem tường của \(message.user.name)")
             }
 
             VStack(alignment: message.mine ? .trailing : .leading, spacing: 3) {
                 if !message.mine {
                     HStack(spacing: 6) {
-                        Text(message.user.name)
-                            .font(.caption.weight(.semibold))
-                            .lineLimit(1)
+                        NavigationLink(value: message.user.socialUser(online: online)) {
+                            HStack(spacing: 3) {
+                                Text(message.user.name)
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.primary)
+                                    .lineLimit(1)
+                                if isOwner {
+                                    Text("👑")
+                                        .font(.caption2)
+                                        .accessibilityLabel("Chủ phòng")
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
                         Text(SocialFormat.time(message.createdAt))
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
+                        if hasHan { speakButton(message) }
                     }
                 }
 
@@ -782,6 +985,13 @@ struct RoomChatView: View {
                     )
                     .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18, style: .continuous))
                     .contextMenu {
+                        if hasHan {
+                            Button {
+                                voice.speak(message.text)
+                            } label: {
+                                Label("Nghe", systemImage: "speaker.wave.2")
+                            }
+                        }
                         Button {
                             UIPasteboard.general.string = message.text
                         } label: {
@@ -797,9 +1007,12 @@ struct RoomChatView: View {
                     }
 
                 if message.mine {
-                    Text(SocialFormat.time(message.createdAt))
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+                    HStack(spacing: 6) {
+                        if hasHan { speakButton(message) }
+                        Text(SocialFormat.time(message.createdAt))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
             }
 
@@ -807,6 +1020,21 @@ struct RoomChatView: View {
                 Spacer(minLength: 48)
             }
         }
+    }
+
+    /// Nút loa nhỏ: đọc câu tiếng Trung bằng giọng tự nhiên (giống nút Nghe ở hội thoại AI).
+    private func speakButton(_ message: RoomMessage) -> some View {
+        Button {
+            voice.speak(message.text)
+        } label: {
+            Image(systemName: "speaker.wave.2.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(socialRed)
+                .frame(width: 24, height: 20)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Nghe")
     }
 
     /// Có chữ Hán thì hiện pinyin xanh phía trên từng từ; chạm vào từ để xem nghĩa.
@@ -822,13 +1050,269 @@ struct RoomChatView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
+}
 
-    // MARK: Ô soạn tin
+// MARK: - Nói trong phòng chat
 
-    private var composer: some View {
-        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        let tooLong = draft.count > RoomChatModel.maxLength
-        return VStack(spacing: 4) {
+/// Micro của phòng chat, giống khu trả lời của hội thoại AI:
+/// micro lớn nói tiếng Trung (gửi luôn), micro VI nói tiếng Việt (dịch rồi xác nhận), ∞ rảnh tay.
+@MainActor
+final class RoomVoiceModel: ObservableObject {
+    static let handsFreeKey = "roomChatHandsFree"
+
+    /// Rảnh tay: gửi xong một câu là micro tự mở lại.
+    @Published var handsFree = UserDefaults.standard.bool(forKey: RoomVoiceModel.handsFreeKey) {
+        didSet { UserDefaults.standard.set(handsFree, forKey: Self.handsFreeKey) }
+    }
+    /// Đang nghe tiếng Việt (micro VI).
+    @Published private(set) var isAskingInVietnamese = false
+    /// Câu tiếng Trung vừa nói, đang chờ 1,5 giây trước khi gửi (còn kịp Huỷ).
+    @Published private(set) var outgoing: String?
+    /// Câu tiếng Việt vừa nói và bản dịch tiếng Trung, chờ người học bấm Gửi / Sửa.
+    @Published private(set) var pendingVi: String?
+    @Published private(set) var pendingZh: String?
+    @Published private(set) var translating = false
+    @Published private(set) var isSending = false
+
+    var isListening: Bool { captureStore?.isListening ?? false }
+    var transcript: String { captureStore?.transcript ?? "" }
+    var level: Float { captureStore?.level ?? 0 }
+    /// Đang ở chế độ gõ chữ: không tự mở micro (rảnh tay).
+    var typing = false {
+        didSet { if typing { stopListening() } }
+    }
+
+    var onError: (@MainActor (String) -> Void)?
+
+    /// Tạo micro khi dùng lần đầu (View có thể dựng lại nhiều lần, không tạo AVAudioEngine thừa).
+    private var captureStore: SpeechCapture?
+    private var captureObserver: AnyCancellable?
+    private var send: (@MainActor (String) async -> Bool)?
+    private var active = false
+    private var sendTask: Task<Void, Never>?
+    private var translateTask: Task<Void, Never>?
+    private var generation = 0
+
+    private var capture: SpeechCapture {
+        if let captureStore { return captureStore }
+        let capture = SpeechCapture()
+        captureObserver = capture.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+        capture.onError = { [weak self] message in
+            Task { @MainActor in
+                self?.finishVietnameseListening()
+                self?.onError?(message)
+            }
+        }
+        captureStore = capture
+        return capture
+    }
+
+    func activate(send: @escaping @MainActor (String) async -> Bool) {
+        self.send = send
+        active = true
+    }
+
+    /// Rời màn phòng: tắt micro, dừng vòng rảnh tay, bỏ câu đang chờ.
+    func deactivate() {
+        active = false
+        generation += 1
+        captureStore?.cancel()
+        finishVietnameseListening()
+        sendTask?.cancel()
+        sendTask = nil
+        translateTask?.cancel()
+        translateTask = nil
+        outgoing = nil
+        translating = false
+        NaturalSpeaker.chinese.stop()
+    }
+
+    /// Chuyển sang gõ chữ: tắt micro.
+    func stopListening() {
+        generation += 1
+        captureStore?.cancel()
+        finishVietnameseListening()
+    }
+
+    // MARK: Micro tiếng Trung
+
+    /// Bấm micro lớn: đang nghe thì chốt câu, chưa nghe thì bắt đầu nghe.
+    func toggleMic() {
+        if isListening {
+            capture.finish()
+        } else {
+            NaturalSpeaker.all.forEach { $0.stop() }
+            listen()
+        }
+    }
+
+    func listen() {
+        guard active, !typing, !isListening, outgoing == nil, !isSending else { return }
+        // Đang đọc tin thì để đọc xong, tránh micro thu lại tiếng của máy.
+        guard !NaturalSpeaker.chinese.isSpeaking else { return }
+        clearPending()
+        finishVietnameseListening()
+        capture.start(targets: []) { [weak self] heard in
+            Task { @MainActor in
+                guard let self else { return }
+                let text = heard.trimmingCharacters(in: .whitespacesAndNewlines)
+                // Không nghe được gì: dừng vòng rảnh tay để người học chủ động bấm lại.
+                guard !text.isEmpty else { return }
+                self.queueSend(text)
+            }
+        }
+    }
+
+    /// Hiện câu vừa nói (có pinyin) 1,5 giây rồi gửi; bấm Huỷ trong lúc đó thì bỏ.
+    private func queueSend(_ text: String) {
+        sendTask?.cancel()
+        outgoing = text
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        sendTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard let self, !Task.isCancelled, self.outgoing == text else { return }
+            await self.deliver(text)
+            self.outgoing = nil
+        }
+    }
+
+    func cancelOutgoing() {
+        sendTask?.cancel()
+        sendTask = nil
+        outgoing = nil
+    }
+
+    private func deliver(_ text: String) async {
+        guard let send, active else { return }
+        isSending = true
+        let ok = await send(text)
+        isSending = false
+        if ok && handsFree { listenSoon() }
+    }
+
+    /// Rảnh tay: mở lại micro khi máy không còn đọc (thử lại vài lần).
+    private func listenSoon(attempt: Int = 0) {
+        let current = generation
+        DispatchQueue.main.asyncAfter(deadline: .now() + (attempt == 0 ? 0.4 : 0.5)) { [weak self] in
+            guard let self, self.active, self.handsFree, self.generation == current, attempt < 30 else { return }
+            guard !NaturalSpeaker.chinese.isSpeaking, self.outgoing == nil, !self.isSending, self.pendingVi == nil else {
+                self.listenSoon(attempt: attempt + 1)
+                return
+            }
+            self.listen()
+        }
+    }
+
+    func toggleHandsFree() {
+        handsFree.toggle()
+        if handsFree {
+            listen()
+        } else if isListening {
+            stopListening()
+        }
+    }
+
+    // MARK: Micro tiếng Việt
+
+    /// Nghe tiếng Việt, dịch sang tiếng Trung để người học xem lại rồi mới gửi.
+    func askInVietnamese() {
+        if isListening {
+            capture.finish()
+            return
+        }
+        guard active, !typing else { return }
+        NaturalSpeaker.all.forEach { $0.stop() }
+        cancelOutgoing()
+        clearPending()
+        isAskingInVietnamese = true
+        capture.localeIdentifier = "vi-VN"
+        capture.start(targets: []) { [weak self] heard in
+            Task { @MainActor in
+                guard let self else { return }
+                self.finishVietnameseListening()
+                let text = heard.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !text.isEmpty else { return }
+                self.translate(text)
+            }
+        }
+    }
+
+    private func translate(_ text: String) {
+        pendingVi = text
+        pendingZh = nil
+        translating = true
+        translateTask?.cancel()
+        translateTask = Task { [weak self] in
+            do {
+                let zh = try await SocialAPI.translate(text: text, to: "zh")
+                guard let self, !Task.isCancelled, self.pendingVi == text else { return }
+                self.pendingZh = zh
+                self.translating = false
+            } catch {
+                guard let self, !Task.isCancelled, self.pendingVi == text else { return }
+                self.clearPending()
+                if !(error is CancellationError) { self.onError?(error.localizedDescription) }
+            }
+        }
+    }
+
+    /// Gửi bản dịch đã xem.
+    func confirmPending() {
+        guard let zh = pendingZh else { return }
+        clearPending()
+        Task { await deliver(zh) }
+    }
+
+    /// Lấy bản dịch ra để sửa trong ô gõ chữ.
+    func takePendingForEditing() -> String {
+        let text = pendingZh ?? pendingVi ?? ""
+        clearPending()
+        return text
+    }
+
+    func clearPending() {
+        translateTask?.cancel()
+        translateTask = nil
+        pendingVi = nil
+        pendingZh = nil
+        translating = false
+    }
+
+    private func finishVietnameseListening() {
+        isAskingInVietnamese = false
+        captureStore?.localeIdentifier = "zh-CN"
+    }
+
+    // MARK: Nghe tin nhắn
+
+    /// Đọc một tin tiếng Trung; tắt micro trước để loa và micro không tranh nhau.
+    /// Rảnh tay thì đọc xong micro tự mở lại.
+    func speak(_ text: String) {
+        stopListening()
+        NaturalSpeaker.chinese.speak(text, preferOpenAI: true, completion: { [weak self] in
+            Task { @MainActor in
+                guard let self, self.active, self.handsFree else { return }
+                self.listenSoon()
+            }
+        })
+    }
+}
+
+/// Ô soạn tin: mặc định là hàng micro (⌨️ · VI · micro lớn · ∞), bấm bàn phím để gõ chữ.
+private struct RoomComposer: View {
+    @ObservedObject var model: RoomChatModel
+    @ObservedObject var voice: RoomVoiceModel
+    @Binding var focused: Bool
+
+    @AppStorage("roomChatTextMode") private var textMode = false
+    @State private var draft = ""
+    @FocusState private var fieldFocused: Bool
+    @AppStorage(SharedSettings.showHanVietKey, store: SharedSettings.store) private var showHanViet = false
+
+    var body: some View {
+        VStack(spacing: 8) {
             if !model.room.joined, model.loaded {
                 HStack {
                     Text("Bạn chưa tham gia phòng này")
@@ -840,10 +1324,261 @@ struct RoomChatView: View {
                 }
                 .padding(.horizontal, 4)
             }
+            if textMode {
+                textRow
+            } else {
+                if voice.isListening {
+                    listeningStrip
+                } else if let outgoing = voice.outgoing {
+                    outgoingCard(outgoing)
+                } else if voice.pendingVi != nil {
+                    pendingCard
+                }
+                micRow
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, textMode ? 8 : 4)
+        .background(.bar)
+        .animation(.easeInOut(duration: 0.18), value: voice.isListening)
+        .animation(.easeInOut(duration: 0.18), value: voice.outgoing)
+        .animation(.easeInOut(duration: 0.18), value: voice.pendingVi)
+        .onChange(of: fieldFocused) { focused = $0 }
+        .onAppear { voice.typing = textMode }
+        .onChange(of: textMode) { voice.typing = $0 }
+    }
+
+    // MARK: Hàng micro
+
+    private var micRow: some View {
+        HStack(spacing: 12) {
+            Button {
+                voice.stopListening()
+                textMode = true
+                fieldFocused = true
+            } label: {
+                Image(systemName: "keyboard")
+                    .font(.system(size: 19))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(Color(.secondarySystemFill)))
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Gõ chữ thay vì nói")
+
+            Button {
+                voice.askInVietnamese()
+            } label: {
+                VStack(spacing: 1) {
+                    Image(systemName: voice.isAskingInVietnamese ? "stop.fill" : "mic.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("VI")
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .foregroundStyle(voice.isAskingInVietnamese ? .white : Color.secondary)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(voice.isAskingInVietnamese ? socialRed : Color(.secondarySystemFill)))
+            }
+            .buttonStyle(.borderless)
+            .disabled(voice.translating || (voice.isListening && !voice.isAskingInVietnamese))
+            .accessibilityLabel("Chưa biết nói tiếng Trung — nói tiếng Việt để dịch rồi gửi")
+
+            Spacer(minLength: 0)
+            micButton
+            Spacer(minLength: 0)
+
+            Button {
+                voice.toggleHandsFree()
+            } label: {
+                Image(systemName: "infinity")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(voice.handsFree ? socialRed : Color.secondary)
+                    .frame(width: 44, height: 44)
+                    .background(Circle().fill(voice.handsFree ? socialRed.opacity(0.14) : Color(.secondarySystemFill)))
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(voice.handsFree ? "Tắt chế độ rảnh tay" : "Bật chế độ rảnh tay")
+        }
+    }
+
+    private var micButton: some View {
+        let listening = voice.isListening && !voice.isAskingInVietnamese
+        let busy = voice.isSending || model.sending
+        return Button {
+            voice.toggleMic()
+        } label: {
+            ZStack {
+                if listening {
+                    Circle()
+                        .fill(socialRed.opacity(0.22))
+                        .frame(width: 72 + CGFloat(voice.level) * 36, height: 72 + CGFloat(voice.level) * 36)
+                        .animation(.easeOut(duration: 0.12), value: voice.level)
+                }
+                Circle()
+                    .fill(busy ? Color.gray.opacity(0.5) : socialRed)
+                    .frame(width: 72, height: 72)
+                if busy {
+                    ProgressView().tint(.white)
+                } else {
+                    Image(systemName: listening ? "stop.fill" : "mic.fill")
+                        .font(.system(size: 27, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+            }
+            .frame(width: 116, height: 80)
+        }
+        .buttonStyle(.borderless)
+        .disabled(busy || voice.isAskingInVietnamese)
+        .accessibilityLabel(listening ? "Nói xong" : "Bấm để nói tiếng Trung")
+    }
+
+    // MARK: Chữ đang nghe / câu chờ gửi
+
+    private var listeningStrip: some View {
+        RoomTranscriptView(text: voice.transcript,
+                           placeholder: voice.isAskingInVietnamese
+                               ? "Đang nghe… nói bằng tiếng Việt câu bạn muốn nhắn"
+                               : "Đang nghe… hãy nói bằng tiếng Trung")
+            .padding(.horizontal, 4)
+    }
+
+    private func outgoingCard(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            chineseText(text)
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text(voice.isSending ? "Đang gửi…" : "Sắp gửi…")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if !voice.isSending {
+                    Button("Huỷ") { voice.cancelOutgoing() }
+                        .font(.caption.weight(.semibold))
+                        .buttonStyle(.borderless)
+                }
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(socialRed.opacity(0.08)))
+        .transition(.opacity)
+    }
+
+    private var pendingCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let zh = voice.pendingZh {
+                chineseText(zh)
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Đang dịch sang tiếng Trung…")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if let vi = voice.pendingVi {
+                Text("🇻🇳 \(vi)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            HStack(spacing: 10) {
+                Button {
+                    voice.clearPending()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 32, height: 32)
+                        .background(Circle().fill(Color(.secondarySystemFill)))
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Bỏ")
+                Spacer()
+                if let zh = voice.pendingZh {
+                    Button {
+                        NaturalSpeaker.chinese.speak(zh, preferOpenAI: true)
+                    } label: {
+                        Image(systemName: "speaker.wave.2.fill")
+                            .font(.system(size: 14))
+                            .foregroundStyle(socialRed)
+                            .frame(width: 32, height: 32)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Nghe")
+                }
+                Button {
+                    draft = voice.takePendingForEditing()
+                    textMode = true
+                    fieldFocused = true
+                } label: {
+                    Text("Sửa")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(socialRed)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 7)
+                        .background(Capsule().strokeBorder(socialRed, lineWidth: 1.5))
+                }
+                .buttonStyle(.borderless)
+                .disabled(voice.pendingZh == nil)
+                Button {
+                    voice.confirmPending()
+                } label: {
+                    Text("Gửi")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(voice.pendingZh == nil ? Color(.systemGray3) : socialRed))
+                }
+                .buttonStyle(.borderless)
+                .disabled(voice.pendingZh == nil)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+        .transition(.opacity)
+    }
+
+    @ViewBuilder
+    private func chineseText(_ text: String) -> some View {
+        if ChineseText.containsHan(text) {
+            RubyText(words: ChineseText.words(for: text), hanziSize: 19, pinyinColor: .blue, showHanViet: showHanViet)
+        } else {
+            Text(text).font(.body)
+        }
+    }
+
+    // MARK: Gõ chữ
+
+    private var textRow: some View {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tooLong = draft.count > RoomChatModel.maxLength
+        return VStack(spacing: 4) {
+            if ChineseText.containsHan(trimmed) {
+                RubyText(words: ChineseText.words(for: trimmed), hanziSize: 16, pinyinColor: .blue, showHanViet: showHanViet)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+            }
             HStack(alignment: .bottom, spacing: 8) {
+                Button {
+                    fieldFocused = false
+                    textMode = false
+                } label: {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 17))
+                        .foregroundStyle(.white)
+                        .frame(width: 38, height: 38)
+                        .background(Circle().fill(socialRed))
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Quay lại nói bằng micro")
+
                 TextField("Nhắn bằng tiếng Trung…", text: $draft, axis: .vertical)
                     .lineLimit(1...5)
-                    .focused($composerFocused)
+                    .focused($fieldFocused)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
                     .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color(.secondarySystemBackground)))
@@ -877,8 +1612,45 @@ struct RoomChatView: View {
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(.bar)
+    }
+}
+
+/// Chữ đang nghe được, kèm pinyin khi là tiếng Trung (giống dải "đang nghe" của hội thoại AI).
+private struct RoomTranscriptView: View {
+    let text: String
+    let placeholder: String
+    private let maxWords = 16
+
+    @State private var words: [PinyinWord] = []
+    @State private var source = ""
+
+    var body: some View {
+        Group {
+            if words.isEmpty {
+                Text(text.isEmpty ? placeholder : text)
+                    .font(.callout)
+                    .foregroundStyle(text.isEmpty ? Color.secondary : socialRed)
+                    .lineLimit(2)
+            } else {
+                RubyText(words: words, hanziSize: 20, hanziWeight: .semibold,
+                         pinyinColor: socialRed.opacity(0.7), hanziColor: socialRed, showHanViet: false)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .animation(.easeOut(duration: 0.12), value: words.count)
+        .onAppear { rebuild(text) }
+        .onChange(of: text) { rebuild($0) }
+    }
+
+    private func rebuild(_ value: String) {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != source else { return }
+        source = trimmed
+        guard ChineseText.containsHan(trimmed) else {
+            words = []
+            return
+        }
+        let all = ChineseText.words(for: trimmed)
+        words = all.count > maxWords ? Array(all.suffix(maxWords)) : all
     }
 }

@@ -5,6 +5,89 @@
 
 import Foundation
 
+/// Một ngày trên lịch 5 tuần của tường.
+struct WallDay: Codable, Hashable {
+    let day: String
+    var sentences: Int = 0
+
+    enum CodingKeys: String, CodingKey { case day, sentences }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        day = try c.decodeIfPresent(String.self, forKey: .day) ?? ""
+        sentences = try c.decodeIfPresent(Int.self, forKey: .sentences) ?? 0
+    }
+}
+
+/// Thành tích kiểu Duolingo.
+struct WallBadge: Codable, Hashable, Identifiable {
+    let key: String
+    let emoji: String
+    let title: String
+    let detail: String
+    var progress: Int = 0
+    var target: Int = 1
+    var done: Bool = false
+
+    var id: String { key }
+
+    enum CodingKeys: String, CodingKey { case key, emoji, title, detail, progress, target, done }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        key = try c.decodeIfPresent(String.self, forKey: .key) ?? title
+        emoji = try c.decodeIfPresent(String.self, forKey: .emoji) ?? "🏅"
+        detail = try c.decodeIfPresent(String.self, forKey: .detail) ?? ""
+        progress = try c.decodeIfPresent(Int.self, forKey: .progress) ?? 0
+        target = max(1, try c.decodeIfPresent(Int.self, forKey: .target) ?? 1)
+        done = try c.decodeIfPresent(Bool.self, forKey: .done) ?? (progress >= target)
+    }
+}
+
+/// Tình huống hội thoại gần đây trên tường.
+struct WallTopic: Codable, Hashable {
+    let title: String
+    let emoji: String
+    var userTurns: Int = 0
+    var target: Int = 50
+    var updatedAt: String?
+
+    enum CodingKeys: String, CodingKey { case title, emoji, userTurns, target, updatedAt }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        emoji = try c.decodeIfPresent(String.self, forKey: .emoji) ?? "💬"
+        userTurns = try c.decodeIfPresent(Int.self, forKey: .userTurns) ?? 0
+        target = max(1, try c.decodeIfPresent(Int.self, forKey: .target) ?? 50)
+        updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt)
+    }
+}
+
+/// Phòng chat do người đó tạo (dạng rút gọn trên tường).
+struct WallRoom: Codable, Hashable, Identifiable {
+    let id: Int
+    let name: String
+    let emoji: String
+
+    enum CodingKeys: String, CodingKey { case id, name, emoji }
+
+    init(id: Int, name: String, emoji: String) {
+        self.id = id
+        self.name = name
+        self.emoji = emoji
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Phòng #\(id)"
+        let icon = try c.decodeIfPresent(String.self, forKey: .emoji) ?? ""
+        emoji = icon.isEmpty ? "💬" : icon
+    }
+}
+
 /// Hồ sơ công khai của một người học (không bao giờ có email).
 struct SocialUser: Codable, Identifiable, Hashable {
     let id: Int
@@ -18,10 +101,24 @@ struct SocialUser: Codable, Identifiable, Hashable {
     var isMe: Bool = false
     var following: Bool = false
     var followsMe: Bool = false
+    /// Đang mở web/app trong 2 phút qua.
+    var online: Bool = false
+    var lastSeenAt: String?
     /// Chỉ có khi xem hồ sơ (action=profile).
     var followersCount: Int?
     var followingCount: Int?
     var joinedAt: String?
+    // Tường (chỉ có khi xem hồ sơ)
+    var bestStreak: Int?
+    var activeDays: Int?
+    var accuracy: Double?
+    var avgCpm: Int?
+    var topicsCount: Int?
+    var topicsCompleted: Int?
+    var calendar: [WallDay] = []
+    var badges: [WallBadge] = []
+    var recentTopics: [WallTopic] = []
+    var rooms: [WallRoom] = []
 
     var initial: String { String(name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased() }
     var handle: String? { username.map { "@\($0)" } }
@@ -29,7 +126,18 @@ struct SocialUser: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, username, avatar, weekSentences, todaySentences, totalSentences, streak
-        case isMe, following, followsMe, followersCount, followingCount, joinedAt
+        case isMe, following, followsMe, online, lastSeenAt, followersCount, followingCount, joinedAt
+        case bestStreak, activeDays, accuracy, avgCpm, topicsCount, topicsCompleted
+        case calendar, badges, recentTopics, rooms
+    }
+
+    /// Hồ sơ tạm từ thông tin rút gọn (tác giả tin nhắn, thành viên phòng); tường tải thêm từ máy chủ.
+    init(id: Int, name: String, username: String?, avatar: String?, online: Bool = false) {
+        self.id = id
+        self.name = name
+        self.username = username
+        self.avatar = avatar
+        self.online = online
     }
 
     init(from decoder: Decoder) throws {
@@ -45,9 +153,21 @@ struct SocialUser: Codable, Identifiable, Hashable {
         isMe = try c.decodeIfPresent(Bool.self, forKey: .isMe) ?? false
         following = try c.decodeIfPresent(Bool.self, forKey: .following) ?? false
         followsMe = try c.decodeIfPresent(Bool.self, forKey: .followsMe) ?? false
+        online = (try? c.decodeIfPresent(Bool.self, forKey: .online)) ?? false
+        lastSeenAt = try? c.decodeIfPresent(String.self, forKey: .lastSeenAt)
         followersCount = try c.decodeIfPresent(Int.self, forKey: .followersCount)
         followingCount = try c.decodeIfPresent(Int.self, forKey: .followingCount)
         joinedAt = try c.decodeIfPresent(String.self, forKey: .joinedAt)
+        bestStreak = try? c.decodeIfPresent(Int.self, forKey: .bestStreak)
+        activeDays = try? c.decodeIfPresent(Int.self, forKey: .activeDays)
+        accuracy = try? c.decodeIfPresent(Double.self, forKey: .accuracy)
+        avgCpm = try? c.decodeIfPresent(Int.self, forKey: .avgCpm)
+        topicsCount = try? c.decodeIfPresent(Int.self, forKey: .topicsCount)
+        topicsCompleted = try? c.decodeIfPresent(Int.self, forKey: .topicsCompleted)
+        calendar = (try? c.decodeIfPresent([WallDay].self, forKey: .calendar)) ?? []
+        badges = (try? c.decodeIfPresent([WallBadge].self, forKey: .badges)) ?? []
+        recentTopics = (try? c.decodeIfPresent([WallTopic].self, forKey: .recentTopics)) ?? []
+        rooms = (try? c.decodeIfPresent([WallRoom].self, forKey: .rooms)) ?? []
     }
 }
 
@@ -78,10 +198,38 @@ struct ChatRoom: Codable, Identifiable, Hashable {
     var createdAt: String
     /// Số người đang mở phòng (hỏi tin trong 20 giây qua). Máy chủ cũ không có thì 0.
     var onlineCount: Int = 0
+    /// Chủ phòng (máy chủ cũ không có thì dựng từ ownerId/ownerName).
+    var owner: RoomMessage.User?
+    /// Thành viên: chủ phòng đầu tiên, rồi người đang online (≤5 ở danh sách, ≤50 trong phòng).
+    var members: [RoomMember] = []
 
     enum CodingKeys: String, CodingKey {
         case id, name, description, emoji, ownerId, ownerName, memberCount, messageCount
-        case lastMessage, lastMessageAt, joined, isOwner, createdAt, onlineCount
+        case lastMessage, lastMessageAt, joined, isOwner, createdAt, onlineCount, owner, members
+    }
+
+    /// Phòng tạm khi mở từ tường (chỉ biết id, tên, biểu tượng); dữ liệu đầy đủ tải khi vào phòng.
+    init(placeholder: WallRoom, ownerId: Int = 0, ownerName: String = "") {
+        id = placeholder.id
+        name = placeholder.name
+        description = ""
+        emoji = placeholder.emoji
+        self.ownerId = ownerId
+        self.ownerName = ownerName
+        memberCount = 0
+        messageCount = 0
+        joined = false
+        isOwner = false
+        createdAt = ""
+    }
+
+    /// Thành viên sắp xếp: chủ phòng đầu tiên, rồi người đang online.
+    var sortedMembers: [RoomMember] {
+        members.enumerated().sorted { a, b in
+            if a.element.isOwner != b.element.isOwner { return a.element.isOwner }
+            if a.element.online != b.element.online { return a.element.online }
+            return a.offset < b.offset
+        }.map(\.element)
     }
 
     init(from decoder: Decoder) throws {
@@ -100,6 +248,44 @@ struct ChatRoom: Codable, Identifiable, Hashable {
         isOwner = try c.decodeIfPresent(Bool.self, forKey: .isOwner) ?? false
         createdAt = try c.decodeIfPresent(String.self, forKey: .createdAt) ?? ""
         onlineCount = try c.decodeIfPresent(Int.self, forKey: .onlineCount) ?? 0
+        owner = try? c.decodeIfPresent(RoomMessage.User.self, forKey: .owner)
+        members = (try? c.decodeIfPresent([RoomMember].self, forKey: .members)) ?? []
+    }
+}
+
+/// Thành viên phòng chat.
+struct RoomMember: Codable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let username: String?
+    let avatar: String?
+    var isOwner: Bool = false
+    /// Đang trong phòng (hỏi tin trong 20 giây qua).
+    var online: Bool = false
+
+    var initial: String { String(name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased() }
+    var avatarURL: URL? { avatar.flatMap(URL.init(string:)) }
+    var socialUser: SocialUser { SocialUser(id: id, name: name, username: username, avatar: avatar, online: online) }
+
+    enum CodingKeys: String, CodingKey { case id, name, username, avatar, isOwner, online }
+
+    init(id: Int, name: String, username: String?, avatar: String?, isOwner: Bool = false, online: Bool = false) {
+        self.id = id
+        self.name = name
+        self.username = username
+        self.avatar = avatar
+        self.isOwner = isOwner
+        self.online = online
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? "Người học #\(id)"
+        username = try c.decodeIfPresent(String.self, forKey: .username)
+        avatar = try c.decodeIfPresent(String.self, forKey: .avatar)
+        isOwner = (try? c.decodeIfPresent(Bool.self, forKey: .isOwner)) ?? false
+        online = (try? c.decodeIfPresent(Bool.self, forKey: .online)) ?? false
     }
 }
 
@@ -112,6 +298,9 @@ struct RoomMessage: Codable, Identifiable, Hashable {
 
         var initial: String { String(name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased() }
         var avatarURL: URL? { avatar.flatMap(URL.init(string:)) }
+        func socialUser(online: Bool = false) -> SocialUser {
+            SocialUser(id: id, name: name, username: username, avatar: avatar, online: online)
+        }
     }
 
     let id: Int
@@ -158,6 +347,8 @@ enum SocialAPI {
         let hasMore: Bool?
         let message: RoomMessage?
         let online: [RoomMessage.User]?
+        // Dịch
+        let zh: String?
     }
 
     /// Phần chung của mọi phản hồi, đọc trước để báo lỗi / hết phiên.
@@ -260,6 +451,16 @@ enum SocialAPI {
         _ = try await call("message_delete", ["messageId": id])
     }
 
+    // MARK: Dịch (nói tiếng Việt trong phòng chat)
+
+    /// Dịch câu sang tiếng Trung để người học xác nhận trước khi gửi vào phòng.
+    static func translate(text: String, to language: String = "zh") async throws -> String {
+        let zh = try await call("translate", ["text": text, "to": language]).zh?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !zh.isEmpty else { throw WebBackendError(message: "Chưa dịch được câu này. Hãy thử nói lại.") }
+        return zh
+    }
+
     // MARK: Gọi máy chủ
 
     private static var missing: WebBackendError { WebBackendError(message: "Máy chủ trả về dữ liệu lỗi. Hãy thử lại sau.") }
@@ -333,6 +534,38 @@ enum SocialFormat {
         guard let text else { return nil }
         return parser.date(from: text)
     }
+
+    /// "Đang online" hoặc "Hoạt động 5 phút / 3 giờ / 2 ngày trước".
+    static func presence(online: Bool, lastSeenAt: String?) -> String? {
+        if online { return "Đang online" }
+        guard let date = date(lastSeenAt) else { return nil }
+        let seconds = max(0, Date().timeIntervalSince(date))
+        let minutes = Int(seconds / 60)
+        if minutes < 1 { return "Hoạt động vừa xong" }
+        if minutes < 60 { return "Hoạt động \(minutes) phút trước" }
+        let hours = minutes / 60
+        if hours < 24 { return "Hoạt động \(hours) giờ trước" }
+        let days = hours / 24
+        if days < 30 { return "Hoạt động \(days) ngày trước" }
+        let months = days / 30
+        return months < 12 ? "Hoạt động \(months) tháng trước" : "Hoạt động \(months / 12) năm trước"
+    }
+
+    /// "Tham gia tháng 9/2025".
+    static func joined(_ text: String?) -> String? {
+        guard let date = date(text) ?? dayParser.date(from: String((text ?? "").prefix(10))) else { return nil }
+        let parts = Calendar.current.dateComponents([.month, .year], from: date)
+        guard let month = parts.month, let year = parts.year else { return nil }
+        return "Tham gia tháng \(month)/\(year)"
+    }
+
+    static let dayParser: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "Asia/Ho_Chi_Minh")
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
 
     /// "14:05" nếu hôm nay, "Hôm qua 14:05", còn lại "12/09 14:05".
     static func time(_ text: String?) -> String {
