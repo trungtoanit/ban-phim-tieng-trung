@@ -16,7 +16,7 @@
 	<key>DevLoginSecret</key>
 	<string>$(DEV_LOGIN_SECRET)</string>
 	<key>GoogleIOSClientID</key>
-	<string></string>
+	<string>614861743536-uata65mkn9jsqqds8fj5b8dnb2p7v2o3.apps.googleusercontent.com</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
