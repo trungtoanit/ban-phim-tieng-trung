@@ -5,6 +5,7 @@
 //
 
 import Combine
+import PhotosUI
 import SwiftUI
 
 struct ChatRoomsView: View {
@@ -237,7 +238,10 @@ private struct RoomRow: View {
     }
 
     private var preview: String {
-        if let last = room.lastMessage, !last.isEmpty { return last }
+        if let last = room.lastMessage {
+            // Tin cuối chỉ có ảnh (chữ rỗng).
+            return last.isEmpty ? "📷 Ảnh" : last
+        }
         return room.description.isEmpty ? "Chưa có tin nhắn" : room.description
     }
 }
@@ -624,6 +628,41 @@ final class RoomChatModel: ObservableObject {
         }
     }
 
+    /// Ảnh đang tải lên (hiện bong bóng chờ có tiến độ).
+    struct PendingUpload: Identifiable {
+        let id = UUID()
+        let preview: UIImage
+        var progress: Double = 0
+    }
+
+    @Published var uploads: [PendingUpload] = []
+
+    /// Nén ảnh (JPEG ≤ 1600px, chất lượng 0,8) rồi gửi vào phòng.
+    func sendImage(_ image: UIImage) async {
+        guard let jpeg = SocialImageCompressor.jpeg(from: image) else {
+            errorMessage = "Không đọc được ảnh này."
+            return
+        }
+        let upload = PendingUpload(preview: image)
+        uploads.append(upload)
+        defer { uploads.removeAll { $0.id == upload.id } }
+        do {
+            let message = try await SocialAPI.sendImage(roomId: room.id, text: "", jpeg: jpeg) { [weak self] value in
+                guard let self, let index = self.uploads.firstIndex(where: { $0.id == upload.id }) else { return }
+                self.uploads[index].progress = value
+            }
+            merge([message])
+            if !room.joined {
+                room.joined = true
+                room.memberCount += 1
+            }
+            room.lastMessage = message.text
+            room.lastMessageAt = message.createdAt
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     func delete(_ message: RoomMessage) async {
         let before = messages
         messages.removeAll { $0.id == message.id }
@@ -677,6 +716,7 @@ struct RoomChatView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var confirmDelete = false
     @State private var selectedWord: SelectedWord?
+    @State private var viewingImage: SocialImage?
     @State private var composerFocused = false
     @AppStorage(SharedSettings.showHanVietKey, store: SharedSettings.store) private var showHanViet = false
 
@@ -727,6 +767,10 @@ struct RoomChatView: View {
                             .id(message.id)
                     }
 
+                    ForEach(model.uploads) { upload in
+                        uploadBubble(upload)
+                    }
+
                     Color.clear.frame(height: 1).id(Self.bottomID)
                 }
                 .padding(.horizontal, 12)
@@ -739,6 +783,11 @@ struct RoomChatView: View {
                 }
             }
             .onChange(of: model.messages.last?.id) { _ in
+                withAnimation(.easeOut(duration: 0.2)) {
+                    proxy.scrollTo(Self.bottomID, anchor: .bottom)
+                }
+            }
+            .onChange(of: model.uploads.count) { _ in
                 withAnimation(.easeOut(duration: 0.2)) {
                     proxy.scrollTo(Self.bottomID, anchor: .bottom)
                 }
@@ -761,6 +810,9 @@ struct RoomChatView: View {
             ToolbarItem(placement: .navigationBarTrailing) { menu }
         }
         .wordPopup($selectedWord)
+        .fullScreenCover(item: $viewingImage) { image in
+            ZoomableImageViewer(url: image.imageURL)
+        }
         // Hỏi tin mới mỗi 3 giây khi đang mở phòng; rời màn hình thì .task tự huỷ vòng lặp.
         .task {
             await model.load()
@@ -976,6 +1028,25 @@ struct RoomChatView: View {
                     }
                 }
 
+                if let image = message.image {
+                    Button {
+                        viewingImage = image
+                    } label: {
+                        SocialImageView(image: image, maxWidth: 230, maxHeight: 300, cornerRadius: 18)
+                    }
+                    .buttonStyle(.plain)
+                    .contextMenu {
+                        if canDelete {
+                            Button(role: .destructive) {
+                                Task { await model.delete(message) }
+                            } label: {
+                                Label("Xoá ảnh", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+
+                if !message.text.isEmpty || message.image == nil {
                 messageText(message)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 9)
@@ -1005,6 +1076,7 @@ struct RoomChatView: View {
                             }
                         }
                     }
+                }
 
                 if message.mine {
                     HStack(spacing: 6) {
@@ -1020,6 +1092,40 @@ struct RoomChatView: View {
                 Spacer(minLength: 48)
             }
         }
+    }
+
+    /// Ảnh của mình đang tải lên: ảnh mờ + vòng tiến độ.
+    private func uploadBubble(_ upload: RoomChatModel.PendingUpload) -> some View {
+        let ratio = upload.preview.size.height > 0 ? upload.preview.size.width / upload.preview.size.height : 1
+        let width: CGFloat = ratio >= 1 ? 230 : max(120, 300 * ratio)
+        return HStack {
+            Spacer(minLength: 48)
+            VStack(alignment: .trailing, spacing: 3) {
+                Image(uiImage: upload.preview)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: width, height: min(300, width / ratio))
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .opacity(0.55)
+                    .overlay {
+                        VStack(spacing: 6) {
+                            ProgressView(value: upload.progress)
+                                .progressViewStyle(.circular)
+                                .tint(.white)
+                                .controlSize(.large)
+                            Text(upload.progress < 1 ? "\(Int(upload.progress * 100))%" : "Đang xử lý…")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.white)
+                                .shadow(radius: 2)
+                        }
+                    }
+                Text("Đang gửi ảnh…")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Đang gửi ảnh")
     }
 
     /// Nút loa nhỏ: đọc câu tiếng Trung bằng giọng tự nhiên (giống nút Nghe ở hội thoại AI).
@@ -1309,6 +1415,10 @@ private struct RoomComposer: View {
     @AppStorage("roomChatTextMode") private var textMode = false
     @State private var draft = ""
     @FocusState private var fieldFocused: Bool
+    @State private var choosingPhotoSource = false
+    @State private var pickingPhoto = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var showCamera = false
     @AppStorage(SharedSettings.showHanVietKey, store: SharedSettings.store) private var showHanViet = false
 
     var body: some View {
@@ -1347,12 +1457,60 @@ private struct RoomComposer: View {
         .onChange(of: fieldFocused) { focused = $0 }
         .onAppear { voice.typing = textMode }
         .onChange(of: textMode) { voice.typing = $0 }
+        .confirmationDialog("Gửi ảnh", isPresented: $choosingPhotoSource) {
+            Button("Chọn từ thư viện") { pickingPhoto = true }
+            Button("Chụp ảnh") { showCamera = true }
+            Button("Huỷ", role: .cancel) {}
+        }
+        .photosPicker(isPresented: $pickingPhoto, selection: $photoItem, matching: .images)
+        .onChange(of: photoItem) { item in
+            guard let item else { return }
+            photoItem = nil
+            Task {
+                guard let data = try? await item.loadTransferable(type: Data.self), let image = UIImage(data: data) else {
+                    model.errorMessage = "Không đọc được ảnh này."
+                    return
+                }
+                await model.sendImage(image)
+            }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker { image in
+                Task { await model.sendImage(image) }
+            }
+            .ignoresSafeArea()
+        }
+    }
+
+    /// Chọn ảnh: có máy ảnh thì hỏi thư viện / chụp, không thì mở thư viện luôn.
+    private func choosePhoto() {
+        voice.stopListening()
+        if CameraPicker.isAvailable {
+            choosingPhotoSource = true
+        } else {
+            pickingPhoto = true
+        }
+    }
+
+    private func photoButton(size: CGFloat) -> some View {
+        Button {
+            choosePhoto()
+        } label: {
+            Image(systemName: "camera.fill")
+                .font(.system(size: size * 0.4))
+                .foregroundStyle(.secondary)
+                .frame(width: size, height: size)
+                .background(Circle().fill(Color(.secondarySystemFill)))
+        }
+        .buttonStyle(.borderless)
+        .disabled(!model.uploads.isEmpty && model.uploads.count >= 3)
+        .accessibilityLabel("Gửi ảnh")
     }
 
     // MARK: Hàng micro
 
     private var micRow: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Button {
                 voice.stopListening()
                 textMode = true
@@ -1399,6 +1557,8 @@ private struct RoomComposer: View {
             }
             .buttonStyle(.borderless)
             .accessibilityLabel(voice.handsFree ? "Tắt chế độ rảnh tay" : "Bật chế độ rảnh tay")
+
+            photoButton(size: 44)
         }
     }
 
@@ -1575,6 +1735,8 @@ private struct RoomComposer: View {
                 }
                 .buttonStyle(.borderless)
                 .accessibilityLabel("Quay lại nói bằng micro")
+
+                photoButton(size: 38)
 
                 TextField("Nhắn bằng tiếng Trung…", text: $draft, axis: .vertical)
                     .lineLimit(1...5)

@@ -110,28 +110,20 @@ final class FriendsModel: ObservableObject {
 // MARK: - Màn chính
 
 private struct FriendsHomeView: View {
+    enum Tab: String {
+        case feed, friends
+    }
+
     @StateObject private var model = FriendsModel()
+    @StateObject private var feed = FeedModel(source: .feed)
     @State private var query = ""
     @State private var showFollowers = false
+    @State private var tab: Tab = .feed
 
     private var isSearching: Bool { query.trimmingCharacters(in: .whitespaces).count >= 2 }
 
     var body: some View {
-        List {
-            if isSearching {
-                searchSection
-            } else {
-                listSection
-                leaderboardSection
-                suggestionsSection
-            }
-        }
-        .listStyle(.insetGrouped)
-        .overlay {
-            if !model.loaded && model.errorMessage == nil && !isSearching {
-                ProgressView("Đang tải…")
-            }
-        }
+        content
         .navigationTitle("Bạn bè")
         .toolbar {
             if let me = model.payload.me {
@@ -160,7 +152,12 @@ private struct FriendsHomeView: View {
             guard !Task.isCancelled else { return }
             await model.search(query)
         }
-        .refreshable { await model.load() }
+        .refreshable {
+            if tab == .feed && !isSearching {
+                await feed.load()
+            }
+            await model.load()
+        }
         // Tải lần đầu rồi tự làm mới mỗi 30 giây khi màn hình đang mở.
         .task {
             await model.load()
@@ -174,6 +171,84 @@ private struct FriendsHomeView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(model.errorMessage ?? "")
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if isSearching || tab == .friends {
+            List {
+                if isSearching {
+                    searchSection
+                } else {
+                    Section {
+                        tabPicker
+                            .listRowBackground(Color.clear)
+                            .listRowInsets(EdgeInsets())
+                    }
+                    listSection
+                    leaderboardSection
+                    suggestionsSection
+                }
+            }
+            .listStyle(.insetGrouped)
+            .overlay {
+                if !model.loaded && model.errorMessage == nil && !isSearching {
+                    ProgressView("Đang tải…")
+                }
+            }
+        } else {
+            feedScroll
+        }
+    }
+
+    private var tabPicker: some View {
+        Picker("", selection: $tab) {
+            Text("Bảng tin").tag(Tab.feed)
+            Text("Bạn bè").tag(Tab.friends)
+        }
+        .pickerStyle(.segmented)
+    }
+
+    // MARK: Bảng tin
+
+    private var feedScroll: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                tabPicker
+                    .padding(.top, 8)
+                FeedComposerCard(me: model.payload.me) { post in
+                    feed.insert(post)
+                }
+                Picker("", selection: $feed.explore) {
+                    Text("Đang theo dõi").tag(false)
+                    Text("Khám phá").tag(true)
+                }
+                .pickerStyle(.segmented)
+                FeedPostsList(feed: feed, emptyText: feed.explore
+                              ? "Chưa ai đăng bài. Hãy là người đầu tiên!"
+                              : "Chưa có bài nào từ bạn và những người bạn theo dõi. Xem Khám phá hoặc đăng bài đầu tiên nhé!")
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
+        }
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .task {
+            if !feed.loaded { await feed.load() }
+        }
+        .onChange(of: feed.explore) { _ in
+            feed.loaded = false
+            feed.posts = []
+            feed.hasMore = false
+            Task { await feed.load() }
+        }
+        .onDisappear { FeedAudioPlayer.shared.stop() }
+        .alert("Có lỗi", isPresented: Binding(get: { feed.errorMessage != nil }, set: { if !$0 { feed.errorMessage = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(feed.errorMessage ?? "")
         }
     }
 
@@ -457,9 +532,11 @@ struct SocialProfileView: View {
     @State private var busy = false
     @State private var loaded = false
     @State private var errorMessage: String?
+    @StateObject private var postsFeed: FeedModel
 
     init(user: SocialUser, model: FriendsModel? = nil) {
         _user = State(initialValue: user)
+        _postsFeed = StateObject(wrappedValue: FeedModel(source: .user(user.id)))
         self.model = model
     }
 
@@ -467,7 +544,7 @@ struct SocialProfileView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 18) {
+            LazyVStack(spacing: 18) {
                 header
                 // Mở từ phòng chat thì chưa biết có phải mình không: đợi tải hồ sơ xong mới hiện nút.
                 if !user.isMe, loaded || user.followersCount != nil {
@@ -485,6 +562,13 @@ struct SocialProfileView: View {
                 if !loaded {
                     ProgressView().padding(.top, 8)
                 }
+                sectionTitle("Bài đăng")
+                if user.isMe {
+                    FeedComposerCard(me: user) { post in
+                        postsFeed.insert(post)
+                    }
+                }
+                FeedPostsList(feed: postsFeed, emptyText: user.isMe ? "Bạn chưa đăng bài nào." : "\(user.name) chưa đăng bài nào.")
             }
             .padding(.horizontal)
             .padding(.bottom, 24)
@@ -494,8 +578,21 @@ struct SocialProfileView: View {
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .navigationTitle(user.isMe ? "Tường của tôi" : user.name)
         .navigationBarTitleDisplayMode(.inline)
-        .refreshable { await reload() }
-        .task { await reload() }
+        .refreshable {
+            async let posts: Void = postsFeed.load()
+            await reload()
+            await posts
+        }
+        .task {
+            async let posts: Void = postsFeed.loaded ? () : postsFeed.load()
+            await reload()
+            await posts
+        }
+        .onChange(of: postsFeed.errorMessage) { message in
+            guard let message else { return }
+            errorMessage = message
+            postsFeed.errorMessage = nil
+        }
         .alert("Có lỗi", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
