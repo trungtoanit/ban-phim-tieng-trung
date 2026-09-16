@@ -341,7 +341,8 @@ struct WordInsightView: View {
                             .foregroundStyle(accentRed)
                     }
                 }
-                if insight != nil, OpenAISettings.hasAPIKey {
+                // Kho từ chung (đã đăng nhập website) không soạn lại theo từng máy.
+                if insight != nil, OpenAISettings.hasAPIKey, !WebAccountStore.shared.isSignedIn {
                     ToolbarItem(placement: .cancellationAction) {
                         Button {
                             forceRefresh = true
@@ -589,7 +590,7 @@ struct WordInsightView: View {
             Text(message)
                 .multilineTextAlignment(.center)
             HStack {
-                if !OpenAISettings.hasAPIKey {
+                if !OpenAISettings.hasAPIKey, !WebAccountStore.shared.isSignedIn {
                     Button("Nhập khoá OpenAI") { showSettings = true }
                         .buttonStyle(.borderedProminent)
                 } else {

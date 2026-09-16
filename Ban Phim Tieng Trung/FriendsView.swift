@@ -606,6 +606,8 @@ struct SocialProfileView: View {
                         wallTabContent
                     case .skills:
                         skillsTabContent
+                    case .study:
+                        studyTabContent
                     }
                 }
                 .id(tab)
@@ -649,7 +651,7 @@ struct SocialProfileView: View {
     // MARK: Tab Tường / Kỹ năng
 
     enum WallTab: Hashable {
-        case wall, skills
+        case wall, skills, study
 
         /// Tab chọn gần nhất (nhớ trong lúc app đang mở).
         static var last: WallTab = .wall
@@ -661,6 +663,7 @@ struct SocialProfileView: View {
         HStack(spacing: 0) {
             tabButton(.wall, title: user.isMe ? "📝 Tường của bạn" : "📝 Tường")
             tabButton(.skills, title: "📊 Kỹ năng")
+            tabButton(.study, title: "📚 Học tập")
         }
         .overlay(alignment: .bottom) {
             Rectangle().fill(Color(.separator)).frame(height: 0.5)
@@ -716,7 +719,7 @@ struct SocialProfileView: View {
         }
     }
 
-    /// Kỹ năng: thống kê, huân chương, tiến bộ, lịch 5 tuần, thành tích, tình huống gần đây, phòng chat đã tạo.
+    /// Kỹ năng: thống kê, huân chương, tiến bộ, lịch 5 tuần, thành tích.
     @ViewBuilder
     private var skillsTabContent: some View {
         VStack(spacing: 18) {
@@ -730,8 +733,29 @@ struct SocialProfileView: View {
             }
             if !user.calendar.isEmpty { calendarCard }
             if !user.badges.isEmpty { badgesCard }
+        }
+    }
+
+    /// Học tập: tình huống gần đây, phòng chat đã tạo.
+    @ViewBuilder
+    private var studyTabContent: some View {
+        VStack(spacing: 18) {
+            if !loaded {
+                ProgressView().padding(.top, 8)
+            }
             if !user.recentTopics.isEmpty { topicsCard }
             if !user.rooms.isEmpty { roomsCard }
+            if loaded, user.recentTopics.isEmpty, user.rooms.isEmpty {
+                VStack(spacing: 6) {
+                    Text("📚").font(.largeTitle)
+                    Text(user.isMe ? "Bạn chưa luyện tình huống nào hay tạo phòng chat." : "\(user.name) chưa luyện tình huống nào hay tạo phòng chat.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 28)
+            }
         }
     }
 
