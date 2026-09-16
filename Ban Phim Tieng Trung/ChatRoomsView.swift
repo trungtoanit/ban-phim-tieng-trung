@@ -4,6 +4,7 @@
 //  Dùng chung dữ liệu với phong-chat.php của website (api/social.php). Tin mới được hỏi lại mỗi 3 giây.
 //
 
+import AudioToolbox
 import Combine
 import PhotosUI
 import SwiftUI
@@ -618,6 +619,8 @@ final class RoomChatModel: ObservableObject {
 
     /// Quà mới đến (mình vừa tặng, hoặc người khác tặng khi đang mở phòng) → phát hiệu ứng.
     let giftArrived = PassthroughSubject<RoomMessage, Never>()
+    /// Tin mới của người khác đến qua lần hỏi định kỳ (không tính lịch sử, tin của mình, tin vào / rời phòng).
+    let incomingArrived = PassthroughSubject<[RoomMessage], Never>()
     private var giftEffectShown = Set<Int>()
 
     private func announceGifts(_ fresh: [RoomMessage]) {
@@ -717,7 +720,10 @@ final class RoomChatModel: ObservableObject {
             room = page.room
             if let people = page.online, people != online { online = people }
             if let people = page.typing, people != typing { typing = people }
-            announceGifts(merge(page.messages))
+            let fresh = merge(page.messages)
+            announceGifts(fresh)
+            let incoming = fresh.filter { !$0.mine && $0.system == nil }
+            if !incoming.isEmpty { incomingArrived.send(incoming) }
             if !page.deletedIds.isEmpty {
                 let deleted = Set(page.deletedIds)
                 if messages.contains(where: { deleted.contains($0.id) }) {
@@ -887,6 +893,10 @@ struct RoomChatView: View {
     @State private var viewingImage: SocialImage?
     /// Hiệu ứng quà. @State (không theo dõi) để phát hiệu ứng không vẽ lại danh sách tin.
     @State private var giftCenter = GiftEffectCenter()
+    /// Âm báo tin nhắn mới (nhớ theo tài khoản).
+    @State private var messageSound = RoomChatPrefs.messageSound
+    /// Mốc lần phát âm báo gần nhất (lớp thường để đổi không vẽ lại màn hình).
+    @State private var soundGate = SoundGate()
     /// Tin cần cuộn tới (bấm vào trích dẫn) và tin đang được tô sáng.
     @State private var scrollTarget: Int?
     @State private var highlightedID: Int?
@@ -1039,6 +1049,7 @@ struct RoomChatView: View {
         }
         .overlay { GiftEffectsOverlay(center: giftCenter) }
         .onReceive(model.giftArrived) { giftCenter.enqueue($0) }
+        .onReceive(model.incomingArrived) { playIncomingSound($0) }
         .animation(.easeInOut(duration: 0.2), value: model.typing.map(\.id))
         .onAppear {
             voice.activate { [model] text in await model.send(text) }
@@ -1215,8 +1226,31 @@ struct RoomChatView: View {
         .accessibilityLabel("\(isMe ? "Bạn" : user.name)\(user.id == model.room.ownerId ? ", chủ phòng" : ""), đang online")
     }
 
+    /// Âm báo tin mới: tối đa 1 lần / 1,5 giây; im khi đang nghe micro hoặc máy đang đọc
+    /// (để bộ nhận dạng không thu tiếng chuông). Âm hệ thống tự theo nút gạt im lặng.
+    private func playIncomingSound(_ messages: [RoomMessage]) {
+        guard messageSound else { return }
+        guard !voice.isListening, !NaturalSpeaker.all.contains(where: { $0.isSpeaking }) else { return }
+        let now = Date()
+        if let last = soundGate.lastPlayed, now.timeIntervalSince(last) < 1.5 { return }
+        soundGate.lastPlayed = now
+        let onlyGifts = messages.allSatisfy { $0.gift != nil }
+        // Quà đã có rung + hiệu ứng riêng: dùng âm khác, không rung thêm.
+        AudioServicesPlaySystemSound(onlyGifts ? 1057 : 1003)
+        if !onlyGifts {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
+    }
+
     private var menu: some View {
         Menu {
+            Button {
+                messageSound.toggle()
+                RoomChatPrefs.messageSound = messageSound
+            } label: {
+                Label(messageSound ? "Âm báo tin nhắn: Bật" : "Âm báo tin nhắn: Tắt",
+                      systemImage: messageSound ? "bell.fill" : "bell.slash")
+            }
             if model.room.joined {
                 if !model.room.isOwner {
                     Button {
@@ -2479,6 +2513,12 @@ enum RoomChatPrefs {
         set { values["textMode"] = newValue }
     }
 
+    /// Âm báo khi có tin mới trong phòng đang mở (mặc định bật).
+    static var messageSound: Bool {
+        get { values["messageSound"] ?? true }
+        set { values["messageSound"] = newValue }
+    }
+
     static var handsFree: Bool {
         get { values["handsFree"] ?? false }
         set { values["handsFree"] = newValue }
@@ -2547,4 +2587,9 @@ private struct SystemMessagePill: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(name) \(action)\(time.isEmpty ? "" : ", \(time)")")
     }
+}
+
+/// Giữ thời điểm phát âm báo gần nhất.
+final class SoundGate {
+    var lastPlayed: Date?
 }
