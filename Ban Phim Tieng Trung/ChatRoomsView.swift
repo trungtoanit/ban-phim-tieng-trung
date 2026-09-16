@@ -1118,20 +1118,42 @@ struct RoomChatView: View {
         .accessibilityHint("Xem thành viên")
     }
 
-    /// Dải "Đang trong phòng": ảnh đại diện + tên những người đang mở phòng; nút xem đủ thành viên.
+    /// Người đang online trong phòng: chủ phòng (👑) đứng đầu, rồi mình, rồi người khác.
+    private var onlinePeople: [RoomMessage.User] {
+        let myID = WebAccountStore.shared.user?.id ?? model.online.first?.id
+        var people: [RoomMessage.User] = []
+        var seen = Set<Int>()
+        for user in model.online where seen.insert(user.id).inserted {
+            people.append(user)
+        }
+        for member in model.room.members where member.online && seen.insert(member.id).inserted {
+            people.append(RoomMessage.User(id: member.id, name: member.name, username: member.username, avatar: member.avatar))
+        }
+        func rank(_ user: RoomMessage.User) -> Int {
+            if user.id == model.room.ownerId { return 0 }
+            return user.id == myID ? 1 : 2
+        }
+        return people.enumerated()
+            .sorted { (rank($0.element), $0.offset) < (rank($1.element), $1.offset) }
+            .map(\.element)
+    }
+
+    /// Dải dưới tiêu đề: chỉ những người đang online + link xem tất cả thành viên.
     @ViewBuilder
     private var onlineStrip: some View {
-        if model.loaded, !model.online.isEmpty || model.room.memberCount > 0 {
+        if model.loaded {
+            let people = onlinePeople
+            let myID = WebAccountStore.shared.user?.id ?? model.online.first?.id
+            let othersOnline = people.contains { $0.id != myID }
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 5) {
-                    OnlineDot(size: 7)
-                    Text("Đang trong phòng · \(model.online.count)")
+                    Text("🟢 \(people.count) đang online")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 8)
                     NavigationLink(value: RoomMembersRoute(room: model.room, typingIDs: model.typingIDs)) {
                         HStack(spacing: 3) {
-                            Text("Thành viên (\(model.room.memberCount))")
+                            Text("Xem tất cả \(model.room.memberCount) thành viên")
                             Image(systemName: "chevron.right")
                         }
                         .font(.caption.weight(.semibold))
@@ -1140,48 +1162,57 @@ struct RoomChatView: View {
                     .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 14)
-                if !model.online.isEmpty {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(Array(model.online.enumerated()), id: \.element.id) { index, user in
-                                NavigationLink(value: user.socialUser(online: true)) {
-                                    VStack(spacing: 3) {
-                                        SocialAvatar(url: user.avatarURL, initial: user.initial, size: 36, online: true)
-                                            .overlay(alignment: .top) {
-                                                if user.id == model.room.ownerId {
-                                                    Text("👑").font(.system(size: 12)).offset(y: -9)
-                                                }
-                                            }
-                                            .overlay(alignment: .topTrailing) {
-                                                if model.typingIDs.contains(user.id) {
-                                                    TypingDots(dotSize: 3.5)
-                                                        .padding(.horizontal, 4)
-                                                        .padding(.vertical, 3)
-                                                        .background(Capsule().fill(Color(.systemBackground)))
-                                                        .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 0.5))
-                                                        .offset(x: 8, y: -4)
-                                                }
-                                            }
-                                        Text(index == 0 ? "Bạn" : user.name)
-                                            .font(.caption2)
-                                            .foregroundStyle(.primary)
-                                            .lineLimit(1)
-                                            .frame(maxWidth: 56)
-                                    }
-                                    .padding(.top, 4)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityElement(children: .combine)
-                            }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(people, id: \.id) { user in
+                            onlineAvatar(user, isMe: user.id == myID)
                         }
-                        .padding(.horizontal, 14)
+                        if !othersOnline {
+                            Text("Chưa có ai khác online")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .padding(.leading, people.isEmpty ? 0 : 2)
+                        }
                     }
+                    .padding(.horizontal, 14)
                 }
             }
             .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.bar)
         }
+    }
+
+    private func onlineAvatar(_ user: RoomMessage.User, isMe: Bool) -> some View {
+        NavigationLink(value: user.socialUser(online: true)) {
+            VStack(spacing: 3) {
+                SocialAvatar(url: user.avatarURL, initial: user.initial, size: 36, online: true)
+                    .overlay(alignment: .top) {
+                        if user.id == model.room.ownerId {
+                            Text("👑").font(.system(size: 12)).offset(y: -9)
+                        }
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        if model.typingIDs.contains(user.id) {
+                            TypingDots(dotSize: 3.5)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 3)
+                                .background(Capsule().fill(Color(.systemBackground)))
+                                .overlay(Capsule().strokeBorder(Color(.separator), lineWidth: 0.5))
+                                .offset(x: 8, y: -4)
+                        }
+                    }
+                Text(isMe ? "Bạn" : user.name)
+                    .font(.caption2)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .frame(maxWidth: 56)
+            }
+            .padding(.top, 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(isMe ? "Bạn" : user.name)\(user.id == model.room.ownerId ? ", chủ phòng" : ""), đang online")
     }
 
     private var menu: some View {
