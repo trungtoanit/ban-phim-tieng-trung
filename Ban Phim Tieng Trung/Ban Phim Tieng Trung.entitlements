@@ -4,7 +4,7 @@
 <dict>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.hihi.Ban-Phim-Tieng-Trung</string>
+		<string>group.com.tuantu.hankey</string>
 	</array>
 </dict>
 </plist>

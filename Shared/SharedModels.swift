@@ -6,7 +6,7 @@
 import Foundation
 
 enum AppGroup {
-    static let identifier = "group.hihi.Ban-Phim-Tieng-Trung"
+    static let identifier = "group.com.tuantu.hankey"
     static let urlScheme = "banphimtrung"
     static let activationURL = URL(string: "banphimtrung://activate")!
 
