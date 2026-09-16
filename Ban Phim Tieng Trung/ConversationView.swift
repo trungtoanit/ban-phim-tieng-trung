@@ -1097,12 +1097,15 @@ struct ConversationView: View {
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 9)
-                            .frame(maxWidth: 240, alignment: .leading)
-                            .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(Color(.systemBackground)))
+                            .frame(maxWidth: 260, alignment: .leading)
+                            // Bong do chi cho khung the (dat tren chu se lam chu bi nhoe)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(Color(.systemBackground))
+                                    .shadow(color: Color(.separator), radius: 0, y: 2)
+                            )
                             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 .strokeBorder(Color(.separator), lineWidth: 2))
-                            .shadow(color: Color(.separator), radius: 0, y: 2)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Gợi ý: \(hint.zh), \(hint.vi)")
