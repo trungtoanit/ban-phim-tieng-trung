@@ -4,6 +4,7 @@
 //  Mỗi từ phải nối đúng 15 lần mới tính là thuộc; thêm lại một từ thì học lại từ 0.
 //
 
+import Combine
 import SwiftUI
 
 private let accentRed = Color(red: 0.86, green: 0.17, blue: 0.16)
@@ -42,7 +43,23 @@ final class VocabularyStore: ObservableObject {
            let list = try? JSONDecoder().decode([VocabWord].self, from: data) {
             words = list
         }
+        // Mở app / vừa đăng nhập website: đồng bộ từ vựng với máy chủ.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.accountObserver = WebAccountStore.shared.$user
+                .map { $0?.id }
+                .removeDuplicates()
+                .sink { [weak self] id in
+                    guard id != nil else { return }
+                    Task { await self?.syncWithServer() }
+                }
+        }
     }
+
+    private var accountObserver: AnyCancellable?
+    /// Tăng mỗi lần từ vựng trên máy đổi, để biết có thay đổi trong lúc đang đồng bộ không.
+    private var localVersion = 0
+    private var syncing = false
 
     var learning: [VocabWord] {
         words.filter { !$0.isLearned }.sorted { $0.addedAt > $1.addedAt }
@@ -62,16 +79,29 @@ final class VocabularyStore: ObservableObject {
     @discardableResult
     func add(zh: String, py: String, vi: String, hv: String?) -> AddResult {
         let entry = VocabWord(zh: zh, py: py, vi: Self.shortMeaning(vi), hv: hv)
+        let result: AddResult
         if let index = words.firstIndex(where: { $0.zh == zh }) {
             words[index] = entry
-            save()
-            return .restarted
+            result = .restarted
+        } else {
+            words.append(entry)
+            result = .added
         }
-        words.append(entry)
         save()
-        return .added
+        if WebAccountStore.shared.isSignedIn {
+            Task {
+                do {
+                    try await VocabAPI.post(["action": "add", "zh": zh, "py": py, "vi": entry.vi, "hv": hv ?? ""])
+                } catch {
+                    // Thêm lại = học lại từ 0: phải báo máy chủ, nếu không lần đồng bộ sau giữ số đúng cũ.
+                    if result == .restarted { await MainActor.run { self.queue(.restart, zh) } }
+                }
+            }
+        }
+        return result
     }
 
+    /// Cộng 1 lần đúng trên máy; kết quả cả vòng gửi lên máy chủ bằng `recordRound`.
     func recordCorrect(_ zh: String) {
         guard let index = words.firstIndex(where: { $0.zh == zh }) else { return }
         words[index].correct = min(words[index].correct + 1, Self.target)
@@ -79,15 +109,104 @@ final class VocabularyStore: ObservableObject {
         save()
     }
 
+    /// Hết một vòng nối từ: gửi từ đúng / nhầm lên máy chủ (mất mạng thì lần đồng bộ sau gửi số đúng).
+    func recordRound(correct: [String], missed: [String]) {
+        let now = Date()
+        for zh in missed {
+            if let index = words.firstIndex(where: { $0.zh == zh }) { words[index].lastPracticed = now }
+        }
+        if !missed.isEmpty { save() }
+        guard WebAccountStore.shared.isSignedIn, !(correct.isEmpty && missed.isEmpty) else { return }
+        Task { try? await VocabAPI.post(["action": "record", "correct": correct, "missed": missed]) }
+    }
+
     func restart(_ zh: String) {
         guard let index = words.firstIndex(where: { $0.zh == zh }) else { return }
         words[index].correct = 0
         save()
+        pushOrQueue(.restart, zh)
     }
 
     func remove(_ zh: String) {
         words.removeAll { $0.zh == zh }
         save()
+        pushOrQueue(.remove, zh)
+    }
+
+    // MARK: - Đồng bộ với website (api/vocab.php)
+
+    private enum PendingKind: String { case restart, remove }
+
+    private var pendingKey: String? {
+        WebAccountStore.shared.user.map { "vocabPending.\($0.id)" }
+    }
+
+    /// Việc học lại / xoá chưa gửi được (mất mạng), gửi trước lần đồng bộ sau.
+    private var pending: [[String: String]] {
+        get {
+            guard let pendingKey else { return [] }
+            return UserDefaults.standard.array(forKey: pendingKey) as? [[String: String]] ?? []
+        }
+        set {
+            guard let pendingKey else { return }
+            UserDefaults.standard.set(newValue, forKey: pendingKey)
+        }
+    }
+
+    private func queue(_ kind: PendingKind, _ zh: String) {
+        var list = pending.filter { $0["zh"] != zh || $0["kind"] != kind.rawValue }
+        if kind == .remove { list.removeAll { $0["zh"] == zh } }
+        list.append(["kind": kind.rawValue, "zh": zh])
+        pending = list
+    }
+
+    private func pushOrQueue(_ kind: PendingKind, _ zh: String) {
+        guard WebAccountStore.shared.isSignedIn else { return }
+        Task {
+            do {
+                try await VocabAPI.post(["action": kind.rawValue, "zh": zh])
+            } catch {
+                await MainActor.run { self.queue(kind, zh) }
+            }
+        }
+    }
+
+    /// Gửi việc còn chờ, gửi toàn bộ từ trên máy (máy chủ gộp: giữ số đúng cao hơn, ngày thêm sớm hơn,
+    /// lần luyện muộn hơn) rồi lấy danh sách chung về. Lỗi mạng thì giữ nguyên trên máy, lần sau thử lại.
+    @MainActor
+    func syncWithServer() async {
+        guard WebAccountStore.shared.isSignedIn, !syncing else { return }
+        syncing = true
+        defer { syncing = false }
+
+        for item in pending {
+            guard let kind = item["kind"], let zh = item["zh"] else { continue }
+            do {
+                try await VocabAPI.post(["action": kind, "zh": zh])
+                pending = pending.filter { $0 != item }
+            } catch {
+                return
+            }
+        }
+
+        let version = localVersion
+        let payload: [[String: Any]] = words.map { word in
+            var item: [String: Any] = [
+                "zh": word.zh, "py": word.py, "vi": word.vi, "hv": word.hv ?? "",
+                "correct": word.correct, "addedAt": VocabAPI.iso.string(from: word.addedAt),
+            ]
+            if let practiced = word.lastPracticed { item["lastPracticed"] = VocabAPI.iso.string(from: practiced) }
+            return item
+        }
+        guard let serverWords = try? await VocabAPI.sync(payload) else { return }
+        if version == localVersion {
+            // Máy chủ đã gộp đủ từ trên máy: lấy danh sách chung làm chuẩn (có cả từ thêm trên web).
+            words = serverWords
+            persist()
+        } else {
+            // Trên máy vừa đổi trong lúc đồng bộ: chỉ gộp thêm, lần sau đồng bộ lại.
+            merge(serverWords)
+        }
     }
 
     /// Chọn từ cho một vòng: từ ít lần đúng và lâu chưa luyện trước.
@@ -129,6 +248,11 @@ final class VocabularyStore: ObservableObject {
     }
 
     private func save() {
+        localVersion += 1
+        persist()
+    }
+
+    private func persist() {
         guard let fileURL, let data = try? JSONEncoder().encode(words) else { return }
         try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: fileURL, options: .atomic)
@@ -198,6 +322,8 @@ struct VocabularyTabView: View {
             }
             .navigationTitle("Từ vựng")
             .homeBackButton()
+            .task { await store.syncWithServer() }
+            .refreshable { await store.syncWithServer() }
             .fullScreenCover(isPresented: $playing) {
                 MatchingGameView()
             }
@@ -527,6 +653,7 @@ struct MatchingGameView: View {
             selectedLeft = nil
             selectedRight = nil
             if matched.count == round.count {
+                store.recordRound(correct: counted, missed: Array(missed.subtracting(counted)))
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { finished = true }
                 }
@@ -724,5 +851,80 @@ struct AddVocabularyButton: View {
                     .allowsHitTesting(false)
             }
         }
+    }
+}
+
+// MARK: - API từ vựng của website
+
+enum VocabAPI {
+    static let iso: ISO8601DateFormatter = ISO8601DateFormatter()
+
+    /// Ngày máy chủ trả "yyyy-MM-dd HH:mm:ss" theo giờ Việt Nam.
+    private static let serverDate: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone(identifier: "Asia/Ho_Chi_Minh")
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return f
+    }()
+
+    private struct ServerWord: Decodable {
+        let zh: String
+        let py: String?
+        let vi: String?
+        let hv: String?
+        let correct: Int?
+        let addedAt: String?
+        let lastPracticed: String?
+    }
+
+    private struct Envelope: Decodable {
+        let ok: Bool
+        let error: String?
+        let login: Bool?
+        let words: [ServerWord]?
+    }
+
+    private static func date(_ text: String?) -> Date? {
+        guard let text, !text.isEmpty else { return nil }
+        return serverDate.date(from: text) ?? iso.date(from: text)
+    }
+
+    static func sync(_ words: [[String: Any]]) async throws -> [VocabWord] {
+        let envelope = try await request(["action": "sync", "words": words])
+        guard let list = envelope.words else { throw WebBackendError(message: "Máy chủ trả về dữ liệu lỗi.") }
+        return list.map { item in
+            var word = VocabWord(zh: item.zh, py: item.py ?? "", vi: item.vi ?? "",
+                                 hv: (item.hv?.isEmpty ?? true) ? nil : item.hv)
+            word.correct = min(max(0, item.correct ?? 0), VocabularyStore.target)
+            word.addedAt = date(item.addedAt) ?? Date()
+            word.lastPracticed = date(item.lastPracticed)
+            return word
+        }
+    }
+
+    static func post(_ body: [String: Any]) async throws {
+        _ = try await request(body)
+    }
+
+    private static func request(_ body: [String: Any]) async throws -> Envelope {
+        guard let token = WebAccountStore.shared.token else {
+            throw WebBackendError(message: "Chưa đăng nhập website.", needsLogin: true)
+        }
+        var request = URLRequest(url: WebBackend.baseURL.appendingPathComponent("api/vocab.php"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue(token, forHTTPHeaderField: "X-Api-Token")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        request.timeoutInterval = 20
+        let (data, _) = try await URLSession.shared.data(for: request)
+        guard let envelope = try? JSONDecoder().decode(Envelope.self, from: data) else {
+            throw WebBackendError(message: "Máy chủ trả về dữ liệu lỗi.")
+        }
+        guard envelope.ok else {
+            throw WebBackendError(message: envelope.error ?? "Có lỗi xảy ra.", needsLogin: envelope.login == true)
+        }
+        return envelope
     }
 }
