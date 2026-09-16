@@ -369,6 +369,29 @@ enum StreakStore {
         return MonthGrid(title: formatter.string(from: first), cells: cells, canGoForward: canGoForward)
     }
 
+    /// Nhật ký ngày để đồng bộ.
+    static var logSnapshot: [String: Day] { load() }
+
+    static var best: Int { store.integer(forKey: bestKey) }
+
+    /// Gộp nhật ký từ máy khác: mỗi ngày lấy số câu và thời gian lớn hơn.
+    static func merge(log remote: [String: Day], best remoteBest: Int) {
+        var map = load()
+        var changed = false
+        for (key, day) in remote {
+            let current = map[key]
+            var merged = current ?? Day()
+            if day.sentences > merged.sentences { merged.sentences = day.sentences; changed = true }
+            if day.seconds > merged.seconds { merged.seconds = day.seconds; changed = true }
+            if merged.goal == nil, day.goal != nil { merged.goal = day.goal; changed = true }
+            map[key] = merged
+        }
+        if changed { save(map) }
+        if remoteBest > store.integer(forKey: bestKey) {
+            store.set(remoteBest, forKey: bestKey)
+        }
+    }
+
     private static func load() -> [String: Day] {
         guard let data = store.data(forKey: logKey),
               let map = try? JSONDecoder().decode([String: Day].self, from: data)

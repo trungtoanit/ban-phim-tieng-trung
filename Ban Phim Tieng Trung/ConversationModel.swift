@@ -100,7 +100,7 @@ struct CustomTopicInfo: Codable, Equatable {
 }
 
 final class ScenarioStore: ObservableObject {
-    private static let customKey = "customScenarios"
+    static let customKey = "customScenarios"
     private static let customInfoKey = "customScenarioInfo"
     /// Mỗi tình huống cần nói đủ bấy nhiêu câu mới tính là xong.
     static let targetSentences = 50

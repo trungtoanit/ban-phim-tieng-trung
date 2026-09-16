@@ -19,8 +19,8 @@ struct Phrase: Codable, Identifiable, Hashable {
 }
 
 final class PhraseStore: ObservableObject {
-    private static let masteredKey = "masteredPhraseIDs"
-    private static let countsKey = "phraseCorrectCounts"
+    static let masteredKey = "masteredPhraseIDs"
+    static let countsKey = "phraseCorrectCounts"
     static let savedCategory = "⭐ Đã lưu"
 
     @Published private(set) var phrases: [Phrase] = []
@@ -38,6 +38,7 @@ final class PhraseStore: ObservableObject {
     private let builtInPhrases: [Phrase]
     private let builtInCategories: [String]
     private var activeObserver: NSObjectProtocol?
+    private var mergeObserver: NSObjectProtocol?
 
     init() {
         if let url = Bundle.main.url(forResource: "phrases", withExtension: "json"),
@@ -49,10 +50,8 @@ final class PhraseStore: ObservableObject {
         }
         var seen = Set<String>()
         builtInCategories = builtInPhrases.compactMap { seen.insert($0.category).inserted ? $0.category : nil }
-        if let stored = UserDefaults.standard.dictionary(forKey: Self.countsKey) as? [String: Int] {
-            counts = Dictionary(uniqueKeysWithValues: stored.compactMap { key, value in
-                Int(key).map { ($0, value) }
-            })
+        if UserDefaults.standard.dictionary(forKey: Self.countsKey) != nil {
+            counts = Self.loadCounts()
         } else {
             // Chuyển dữ liệu cũ: đã thuộc = đã đọc đúng một lần.
             let old = UserDefaults.standard.array(forKey: Self.masteredKey) as? [Int] ?? []
@@ -60,6 +59,13 @@ final class PhraseStore: ObservableObject {
         }
         reloadSaved()
 
+        mergeObserver = NotificationCenter.default.addObserver(
+            forName: .cloudSyncMerged, object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.counts = Self.loadCounts()
+            self.reloadSaved()
+        }
         activeObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -139,8 +145,17 @@ final class PhraseStore: ObservableObject {
     }
 
     private func save() {
-        let stored = Dictionary(uniqueKeysWithValues: counts.map { (String($0.key), $0.value) })
-        UserDefaults.standard.set(stored, forKey: Self.countsKey)
+        UserDefaults.standard.set(Self.store(counts), forKey: Self.countsKey)
+    }
+
+    /// Số lần đọc đúng của từng câu, lưu dưới dạng khoá chữ để hợp với UserDefaults.
+    static func loadCounts() -> [Int: Int] {
+        let stored = UserDefaults.standard.dictionary(forKey: countsKey) as? [String: Int] ?? [:]
+        return Dictionary(uniqueKeysWithValues: stored.compactMap { key, value in Int(key).map { ($0, value) } })
+    }
+
+    static func store(_ counts: [Int: Int]) -> [String: Int] {
+        Dictionary(uniqueKeysWithValues: counts.map { (String($0.key), $0.value) })
     }
 }
 

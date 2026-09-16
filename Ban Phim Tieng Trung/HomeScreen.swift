@@ -17,6 +17,7 @@ extension AppTab {
         case .keyboard: "Bàn phím"
         case .about: "Giới thiệu"
         case .interpreter: "Phiên dịch"
+        case .account: "Tài khoản"
         }
     }
 
@@ -30,6 +31,7 @@ extension AppTab {
         case .keyboard: "keyboard.fill"
         case .about: "person.crop.circle.fill"
         case .interpreter: "translate"
+        case .account: "person.crop.circle.badge.checkmark"
         }
     }
 
@@ -44,12 +46,13 @@ extension AppTab {
         case .keyboard: [Color(red: 0.66, green: 0.7, blue: 0.78), Color(red: 0.36, green: 0.4, blue: 0.48)]
         case .about: [Color(red: 0.36, green: 0.74, blue: 1), Color(red: 0.12, green: 0.44, blue: 0.94)]
         case .interpreter: [Color(red: 0.3, green: 0.88, blue: 0.84), Color(red: 0.05, green: 0.58, blue: 0.64)]
+        case .account: [Color(red: 0.62, green: 0.68, blue: 0.98), Color(red: 0.29, green: 0.31, blue: 0.83)]
         }
     }
 
     /// Bốn tính năng dùng nhiều nhất nằm ở dock, còn lại trên màn hình.
     static let dock: [AppTab] = [.practice, .conversation, .vocabulary, .sounds]
-    static let grid: [AppTab] = [.interpreter, .mistakes, .keyboard, .about]
+    static let grid: [AppTab] = [.interpreter, .mistakes, .keyboard, .account, .about]
 }
 
 // MARK: - Nút về trang chủ

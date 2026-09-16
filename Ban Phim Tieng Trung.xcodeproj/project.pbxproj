@@ -43,7 +43,6 @@
 		B10000000000000000000138 /* hanviet.json in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* hanviet.json */; };
 		B10000000000000000000139 /* replies.json in Resources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000026 /* replies.json */; };
 		B10000000000000000000140 /* BanPhimTrungKeyboard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B10000000000000000000025 /* BanPhimTrungKeyboard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		B100000000000000000004B1 /* Interpreter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000004B2 /* Interpreter.swift */; };
 		B10000000000000000000301 /* Mascot.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000302 /* Mascot.swift */; };
 		B10000000000000000000311 /* PronunciationLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000313 /* PronunciationLog.swift */; };
 		B10000000000000000000312 /* PronunciationLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000313 /* PronunciationLog.swift */; };
@@ -60,6 +59,10 @@
 		B10000000000000000000402 /* MistakeExplainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000403 /* MistakeExplainer.swift */; };
 		B10000000000000000000404 /* PinyinGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000315 /* PinyinGuide.swift */; };
 		B100000000000000000004A1 /* VoiceMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000004A2 /* VoiceMode.swift */; };
+		B100000000000000000004B1 /* Interpreter.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000004B2 /* Interpreter.swift */; };
+		B100000000000000000004C1 /* Account.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000004C2 /* Account.swift */; };
+		B100000000000000000004C3 /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000004C4 /* AccountView.swift */; };
+		B100000000000000000004C5 /* CloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000004C6 /* CloudSync.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -119,7 +122,6 @@
 		B10000000000000000000024 /* BanPhimTrungKeyboard.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BanPhimTrungKeyboard.entitlements; sourceTree = "<group>"; };
 		B10000000000000000000025 /* BanPhimTrungKeyboard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BanPhimTrungKeyboard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10000000000000000000026 /* replies.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = replies.json; sourceTree = "<group>"; };
-		B100000000000000000004B2 /* Interpreter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Interpreter.swift; sourceTree = "<group>"; };
 		B10000000000000000000302 /* Mascot.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Mascot.swift; sourceTree = "<group>"; };
 		B10000000000000000000313 /* PronunciationLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PronunciationLog.swift; sourceTree = "<group>"; };
 		B10000000000000000000315 /* PinyinGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinyinGuide.swift; sourceTree = "<group>"; };
@@ -133,6 +135,10 @@
 		B10000000000000000000392 /* AboutView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutView.swift; sourceTree = "<group>"; };
 		B10000000000000000000403 /* MistakeExplainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MistakeExplainer.swift; sourceTree = "<group>"; };
 		B100000000000000000004A2 /* VoiceMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceMode.swift; sourceTree = "<group>"; };
+		B100000000000000000004B2 /* Interpreter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Interpreter.swift; sourceTree = "<group>"; };
+		B100000000000000000004C2 /* Account.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Account.swift; sourceTree = "<group>"; };
+		B100000000000000000004C4 /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
+		B100000000000000000004C6 /* CloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSync.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -193,6 +199,9 @@
 				B100000000000000000004B2 /* Interpreter.swift */,
 				B100000000000000000004A2 /* VoiceMode.swift */,
 				B10000000000000000000392 /* AboutView.swift */,
+				B100000000000000000004C2 /* Account.swift */,
+				B100000000000000000004C4 /* AccountView.swift */,
+				B100000000000000000004C6 /* CloudSync.swift */,
 				B10000000000000000000382 /* HomeScreen.swift */,
 				B10000000000000000000372 /* Vocabulary.swift */,
 				B10000000000000000000362 /* SplashView.swift */,
@@ -373,6 +382,9 @@
 				B100000000000000000004B1 /* Interpreter.swift in Sources */,
 				B100000000000000000004A1 /* VoiceMode.swift in Sources */,
 				B10000000000000000000391 /* AboutView.swift in Sources */,
+				B100000000000000000004C1 /* Account.swift in Sources */,
+				B100000000000000000004C3 /* AccountView.swift in Sources */,
+				B100000000000000000004C5 /* CloudSync.swift in Sources */,
 				B10000000000000000000381 /* HomeScreen.swift in Sources */,
 				B10000000000000000000371 /* Vocabulary.swift in Sources */,
 				B10000000000000000000361 /* SplashView.swift in Sources */,
@@ -611,6 +623,7 @@
 				CODE_SIGN_ENTITLEMENTS = BanPhimTrungKeyboard/BanPhimTrungKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5G537NZ6R8;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = BanPhimTrungKeyboard/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Bàn Phím Trung";
@@ -636,6 +649,7 @@
 				CODE_SIGN_ENTITLEMENTS = BanPhimTrungKeyboard/BanPhimTrungKeyboard.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5G537NZ6R8;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = BanPhimTrungKeyboard/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Bàn Phím Trung";

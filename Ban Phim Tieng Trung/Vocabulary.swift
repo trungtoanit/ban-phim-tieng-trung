@@ -105,6 +105,29 @@ final class VocabularyStore: ObservableObject {
         return trimmed.prefix(1).uppercased() + trimmed.dropFirst()
     }
 
+    /// Gộp từ vựng từ iCloud: giữ số lần nối đúng cao hơn, ngày thêm sớm hơn.
+    func merge(_ incoming: [VocabWord]) {
+        var byZh = Dictionary(grouping: words, by: \.zh).compactMapValues(\.first)
+        var changed = false
+        for word in incoming {
+            guard var current = byZh[word.zh] else {
+                byZh[word.zh] = word
+                changed = true
+                continue
+            }
+            if word.correct > current.correct { current.correct = word.correct; changed = true }
+            if word.addedAt < current.addedAt { current.addedAt = word.addedAt; changed = true }
+            if let practiced = word.lastPracticed, practiced > (current.lastPracticed ?? .distantPast) {
+                current.lastPracticed = practiced
+                changed = true
+            }
+            byZh[word.zh] = current
+        }
+        guard changed else { return }
+        words = byZh.values.sorted { $0.addedAt < $1.addedAt }
+        save()
+    }
+
     private func save() {
         guard let fileURL, let data = try? JSONEncoder().encode(words) else { return }
         try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)

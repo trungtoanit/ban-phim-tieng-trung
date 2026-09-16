@@ -48,6 +48,11 @@ enum SharedStore {
         return phrase
     }
 
+    /// Ghi lại toàn bộ danh sách sau khi gộp dữ liệu từ iCloud.
+    static func replaceSavedPhrases(_ phrases: [SavedPhrase]) {
+        write(phrases, to: savedFile)
+    }
+
     static func deleteSavedPhrase(id: Int) {
         write(savedPhrases().filter { $0.id != id }, to: savedFile)
     }

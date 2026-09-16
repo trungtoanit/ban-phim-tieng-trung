@@ -16,6 +16,7 @@ enum AppTab: Hashable {
     case keyboard
     case about
     case interpreter
+    case account
 }
 
 struct ContentView: View {
@@ -100,6 +101,7 @@ struct ContentView: View {
         case .keyboard: KeyboardHomeView(openedFromKeyboard: openedFromKeyboard)
         case .about: AboutView()
         case .interpreter: InterpreterView()
+        case .account: AccountTabView()
         }
     }
 
