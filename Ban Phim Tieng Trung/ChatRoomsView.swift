@@ -188,53 +188,110 @@ private struct RoomsListView: View {
 private struct RoomRow: View {
     let room: ChatRoom
 
+    private let ring = Color(.secondarySystemGroupedBackground)
+
+    /// Chủ phòng: lấy trong danh sách thành viên, không có thì dựng từ `room.owner`.
+    private var owner: RoomMember? {
+        if let member = room.members.first(where: { $0.isOwner || $0.id == room.ownerId }) { return member }
+        if let o = room.owner {
+            return RoomMember(id: o.id, name: o.name, username: o.username, avatar: o.avatar, isOwner: true)
+        }
+        guard room.ownerId > 0, !room.ownerName.isEmpty else { return nil }
+        return RoomMember(id: room.ownerId, name: room.ownerName, username: nil, avatar: nil, isOwner: true)
+    }
+
+    /// Người tham gia, không tính chủ phòng.
+    private var participants: [RoomMember] {
+        room.sortedMembers.filter { !$0.isOwner && $0.id != room.ownerId }
+    }
+
     var body: some View {
-        HStack(spacing: 12) {
-            RoomEmoji(emoji: room.emoji, size: 48)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(room.name)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(1)
-                    if room.isOwner {
-                        Text("Chủ phòng")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(socialRed)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(socialRed.opacity(0.12)))
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 12) {
+                RoomEmoji(emoji: room.emoji, size: 48)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(room.name)
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(1)
+                        if room.isOwner {
+                            Text("Chủ phòng")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(socialRed)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(socialRed.opacity(0.12)))
+                        }
                     }
+                    Text(preview)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
-                Text(preview)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                if !room.members.isEmpty {
-                    RoomMemberStack(members: room.sortedMembers, total: room.memberCount)
-                        .padding(.top, 2)
-                }
-            }
-            Spacer(minLength: 6)
-            VStack(alignment: .trailing, spacing: 4) {
-                Text("👥 \(room.memberCount)")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                if room.onlineCount > 0 {
-                    HStack(spacing: 4) {
-                        OnlineDot(size: 7)
-                        Text("\(room.onlineCount) đang online")
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(onlineGreen)
-                    }
-                }
+                Spacer(minLength: 6)
                 if let time = room.lastMessageAt, !SocialFormat.time(time).isEmpty {
                     Text(SocialFormat.time(time))
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
             }
+            bottomRow
         }
         .padding(.vertical, 2)
+    }
+
+    // MARK: Hàng dưới: chủ phòng (trái) · người tham gia (phải)
+
+    private var bottomRow: some View {
+        HStack(alignment: .center, spacing: 8) {
+            if let owner {
+                HStack(spacing: 7) {
+                    SocialAvatar(url: owner.avatarURL, initial: owner.initial, size: 26, online: owner.online, ring: ring)
+                        .overlay(alignment: .top) {
+                            Text("👑")
+                                .font(.system(size: 11))
+                                .offset(y: -10)
+                        }
+                        .padding(.top, 4)
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(owner.name)
+                            .font(.caption.weight(.bold))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Text("Chủ phòng")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.8, green: 0.58, blue: 0.05))
+                    }
+                }
+                .layoutPriority(0)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Chủ phòng \(owner.name)")
+            }
+
+            Spacer(minLength: 6)
+
+            HStack(spacing: 8) {
+                if !participants.isEmpty {
+                    RoomMemberStack(members: participants, total: max(0, room.memberCount - 1))
+                }
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(room.memberCount > 1 ? "\(room.memberCount - 1) người tham gia" : "Chưa ai tham gia")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    if room.onlineCount > 0 {
+                        HStack(spacing: 3) {
+                            OnlineDot(size: 6)
+                            Text("\(room.onlineCount) online")
+                        }
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(onlineGreen)
+                    }
+                }
+                .fixedSize()
+            }
+            .layoutPriority(1)
+        }
     }
 
     private var preview: String {
@@ -246,27 +303,23 @@ private struct RoomRow: View {
     }
 }
 
-/// Chồng ảnh đại diện thành viên (chủ phòng đầu tiên có 👑, chấm xanh người đang online, "+N").
+/// Chồng ảnh đại diện người tham gia (tối đa 4, chấm xanh người đang online, "+N").
+/// Mỗi ảnh có viền màu nền; ảnh trước nằm trên ảnh sau để chấm online ở góc phải không bị che.
 private struct RoomMemberStack: View {
     let members: [RoomMember]
     let total: Int
-    var size: CGFloat = 22
+    var size: CGFloat = 24
+    var maxShown = 4
 
     private let ring = Color(.secondarySystemGroupedBackground)
 
     var body: some View {
-        let shown = Array(members.prefix(5))
-        HStack(spacing: -size * 0.3) {
+        let shown = Array(members.prefix(maxShown))
+        HStack(spacing: -size * 0.28) {
             ForEach(Array(shown.enumerated()), id: \.element.id) { index, member in
                 SocialAvatar(url: member.avatarURL, initial: member.initial, size: size, online: member.online, ring: ring)
-                    .background(Circle().fill(ring).padding(-1.5))
-                    .overlay(alignment: .top) {
-                        if member.isOwner {
-                            Text("👑")
-                                .font(.system(size: size * 0.45))
-                                .offset(y: -size * 0.38)
-                        }
-                    }
+                    .padding(2)
+                    .background(Circle().fill(ring))
                     .zIndex(Double(shown.count - index))
             }
             if total > shown.count {
@@ -276,12 +329,12 @@ private struct RoomMemberStack: View {
                     .padding(.horizontal, 6)
                     .frame(minWidth: size, minHeight: size)
                     .background(Capsule().fill(Color(.tertiarySystemFill)))
-                    .background(Capsule().fill(ring).padding(-1.5))
+                    .padding(2)
+                    .background(Capsule().fill(ring))
             }
         }
-        .padding(.top, size * 0.3)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(total) thành viên")
+        .accessibilityLabel("\(total) người tham gia")
     }
 }
 
