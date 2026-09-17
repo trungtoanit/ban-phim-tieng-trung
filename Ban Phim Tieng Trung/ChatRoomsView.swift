@@ -928,100 +928,84 @@ struct RoomChatView: View {
         self.onDeleted = onDeleted
     }
 
+    // body được tách thành 3 tầng (danh sách tin → khung màn hình → vòng đời & hộp thoại) để trình biên
+    // dịch suy luận kiểu kịp; gộp chung một biểu thức sẽ báo "unable to type-check in reasonable time".
     var body: some View {
+        chatLayout
+            // Hỏi tin mới mỗi 3 giây khi đang mở phòng; rời màn hình thì .task tự huỷ vòng lặp.
+            .task {
+                await model.load()
+                // Lần trước bật rảnh tay thì mở micro lại khi đã vào phòng (xin quyền như hội thoại AI).
+                if voice.handsFree, !voice.isListening {
+                    voice.listen()
+                }
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    guard !Task.isCancelled else { break }
+                    await model.poll()
+                }
+            }
+            .overlay { GiftEffectsOverlay(center: giftCenter) }
+            .onReceive(model.giftArrived) { giftCenter.enqueue($0) }
+            .onReceive(model.incomingArrived) { playIncomingSound($0) }
+            .animation(.easeInOut(duration: 0.2), value: model.typing.map(\.id))
+            .onAppear {
+                voice.activate { [model] text in await model.send(text) }
+                voice.onError = { [model] message in model.errorMessage = message }
+            }
+            // Rời màn phòng thì báo máy chủ bỏ trạng thái đang online (không cần đợi kết quả), tắt micro / rảnh tay.
+            .onDisappear {
+                voice.deactivate()
+                giftCenter.stop()
+                model.userStoppedTyping()
+                let id = model.room.id
+                Task { try? await SocialAPI.roomAway(id: id) }
+            }
+            .onChange(of: model.room) { onUpdate($0) }
+            .onChange(of: model.gone) { gone in
+                guard gone else { return }
+                onDeleted()
+                dismiss()
+            }
+            .confirmationDialog("Xoá phòng “\(model.room.name)”?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("Xoá phòng", role: .destructive) {
+                    Task {
+                        if await model.deleteRoom() {
+                            onDeleted()
+                            dismiss()
+                        }
+                    }
+                }
+                Button("Huỷ", role: .cancel) {}
+            } message: {
+                Text("Toàn bộ tin nhắn trong phòng sẽ không xem được nữa.")
+            }
+            .alert("Có lỗi", isPresented: errorAlertPresented) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(model.errorMessage ?? "")
+            }
+    }
+
+    /// Khung màn hình: danh sách tin + thanh online, composer, toolbar, toast và trình xem ảnh.
+    private var chatLayout: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    if model.hasMore {
-                        Button {
-                            Task { await model.loadOlder() }
-                        } label: {
-                            HStack(spacing: 6) {
-                                if model.loadingOlder { ProgressView().controlSize(.small) }
-                                Text("Tải tin cũ hơn")
-                            }
-                            .font(.footnote.weight(.semibold))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
-                            .background(Capsule().fill(Color(.tertiarySystemFill)))
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(model.loadingOlder)
+            messageList
+                .scrollDismissesKeyboard(.interactively)
+                .overlay {
+                    if !model.loaded && model.errorMessage == nil {
+                        ProgressView()
                     }
-
-                    if model.loaded, model.messages.isEmpty {
-                        VStack(spacing: 8) {
-                            RoomEmoji(emoji: model.room.emoji, size: 64)
-                            Text("Chưa có tin nhắn nào")
-                                .font(.headline)
-                            Text("Hãy chào mọi người bằng tiếng Trung: 大家好！")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.top, 60)
+                }
+                .onChange(of: model.messages.last?.id) { _ in scrollToBottom(proxy) }
+                .onChange(of: scrollTarget) { target in jump(to: target, proxy: proxy) }
+                .onChange(of: model.uploads.count) { _ in scrollToBottom(proxy) }
+                .onChange(of: composerFocused) { focused in
+                    guard focused else { return }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        withAnimation { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
                     }
-
-                    let onlineIDs = model.onlineIDs
-                    ForEach(model.messages) { message in
-                        bubble(message, online: onlineIDs.contains(message.user.id))
-                            .padding(.vertical, 3)
-                            .padding(.horizontal, -4)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(socialRed.opacity(highlightedID == message.id ? 0.14 : 0))
-                            )
-                            .modifier(SwipeToReply(enabled: message.system == nil) { startReply(message) })
-                            .id(message.id)
-                    }
-
-                    ForEach(model.uploads) { upload in
-                        uploadBubble(upload)
-                    }
-
-                    if !model.typing.isEmpty {
-                        TypingIndicator(users: model.typing)
-                            .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    }
-
-                    Color.clear.frame(height: 1).id(Self.bottomID)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 12)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .overlay {
-                if !model.loaded && model.errorMessage == nil {
-                    ProgressView()
-                }
-            }
-            .onChange(of: model.messages.last?.id) { _ in
-                withAnimation(.easeOut(duration: 0.2)) {
-                    proxy.scrollTo(Self.bottomID, anchor: .bottom)
-                }
-            }
-            .onChange(of: scrollTarget) { target in
-                guard let target else { return }
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    proxy.scrollTo(target, anchor: .center)
-                }
-                withAnimation(.easeIn(duration: 0.2)) { highlightedID = target }
-                scrollTarget = nil
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
-                    guard highlightedID == target else { return }
-                    withAnimation(.easeOut(duration: 0.5)) { highlightedID = nil }
-                }
-            }
-            .onChange(of: model.uploads.count) { _ in
-                withAnimation(.easeOut(duration: 0.2)) {
-                    proxy.scrollTo(Self.bottomID, anchor: .bottom)
-                }
-            }
-            .onChange(of: composerFocused) { focused in
-                guard focused else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    withAnimation { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
-                }
-            }
         }
         .background(Color(.systemGroupedBackground).ignoresSafeArea())
         .safeAreaInset(edge: .top, spacing: 0) { onlineStrip }
@@ -1034,75 +1018,119 @@ struct RoomChatView: View {
             ToolbarItem(placement: .navigationBarTrailing) { menu }
         }
         .wordPopup($selectedWord)
-        .overlay(alignment: .top) {
-            if let toast {
-                Text(toast)
-                    .font(.footnote.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .background(Capsule().fill(Color.black.opacity(0.78)))
-                    .padding(.top, 70)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .accessibilityAddTraits(.isStaticText)
-            }
-        }
+        .overlay(alignment: .top) { toastOverlay }
         .fullScreenCover(item: $viewingImage) { image in
             ZoomableImageViewer(url: image.imageURL)
         }
-        // Hỏi tin mới mỗi 3 giây khi đang mở phòng; rời màn hình thì .task tự huỷ vòng lặp.
-        .task {
-            await model.load()
-            // Lần trước bật rảnh tay thì mở micro lại khi đã vào phòng (xin quyền như hội thoại AI).
-            if voice.handsFree, !voice.isListening {
-                voice.listen()
-            }
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                guard !Task.isCancelled else { break }
-                await model.poll()
-            }
-        }
-        .overlay { GiftEffectsOverlay(center: giftCenter) }
-        .onReceive(model.giftArrived) { giftCenter.enqueue($0) }
-        .onReceive(model.incomingArrived) { playIncomingSound($0) }
-        .animation(.easeInOut(duration: 0.2), value: model.typing.map(\.id))
-        .onAppear {
-            voice.activate { [model] text in await model.send(text) }
-            voice.onError = { [model] message in model.errorMessage = message }
-        }
-        // Rời màn phòng thì báo máy chủ bỏ trạng thái đang online (không cần đợi kết quả), tắt micro / rảnh tay.
-        .onDisappear {
-            voice.deactivate()
-            giftCenter.stop()
-            model.userStoppedTyping()
-            let id = model.room.id
-            Task { try? await SocialAPI.roomAway(id: id) }
-        }
-        .onChange(of: model.room) { onUpdate($0) }
-        .onChange(of: model.gone) { gone in
-            guard gone else { return }
-            onDeleted()
-            dismiss()
-        }
-        .confirmationDialog("Xoá phòng “\(model.room.name)”?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Xoá phòng", role: .destructive) {
-                Task {
-                    if await model.deleteRoom() {
-                        onDeleted()
-                        dismiss()
-                    }
+    }
+
+    /// Danh sách tin nhắn (nút tải tin cũ, trạng thái trống, bong bóng tin, ảnh đang gửi, đang gõ).
+    private var messageList: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                if model.hasMore {
+                    loadOlderButton
                 }
+
+                if model.loaded, model.messages.isEmpty {
+                    emptyState
+                }
+
+                let onlineIDs = model.onlineIDs
+                ForEach(model.messages) { message in
+                    bubble(message, online: onlineIDs.contains(message.user.id))
+                        .padding(.vertical, 3)
+                        .padding(.horizontal, -4)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .fill(socialRed.opacity(highlightedID == message.id ? 0.14 : 0))
+                        )
+                        .modifier(SwipeToReply(enabled: message.system == nil) { startReply(message) })
+                        .id(message.id)
+                }
+
+                ForEach(model.uploads) { upload in
+                    uploadBubble(upload)
+                }
+
+                if !model.typing.isEmpty {
+                    TypingIndicator(users: model.typing)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+
+                Color.clear.frame(height: 1).id(Self.bottomID)
             }
-            Button("Huỷ", role: .cancel) {}
-        } message: {
-            Text("Toàn bộ tin nhắn trong phòng sẽ không xem được nữa.")
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
         }
-        .alert("Có lỗi", isPresented: Binding(get: { model.errorMessage != nil && !model.gone },
-                                             set: { if !$0 { model.errorMessage = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.errorMessage ?? "")
+    }
+
+    private var loadOlderButton: some View {
+        Button {
+            Task { await model.loadOlder() }
+        } label: {
+            HStack(spacing: 6) {
+                if model.loadingOlder { ProgressView().controlSize(.small) }
+                Text("Tải tin cũ hơn")
+            }
+            .font(.footnote.weight(.semibold))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(Capsule().fill(Color(.tertiarySystemFill)))
+        }
+        .buttonStyle(.plain)
+        .disabled(model.loadingOlder)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            RoomEmoji(emoji: model.room.emoji, size: 64)
+            Text("Chưa có tin nhắn nào")
+                .font(.headline)
+            Text("Hãy chào mọi người bằng tiếng Trung: 大家好！")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.top, 60)
+    }
+
+    @ViewBuilder
+    private var toastOverlay: some View {
+        if let toast {
+            Text(toast)
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .background(Capsule().fill(Color.black.opacity(0.78)))
+                .padding(.top, 70)
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .accessibilityAddTraits(.isStaticText)
+        }
+    }
+
+    private var errorAlertPresented: Binding<Bool> {
+        Binding(get: { model.errorMessage != nil && !model.gone },
+                set: { if !$0 { model.errorMessage = nil } })
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            proxy.scrollTo(Self.bottomID, anchor: .bottom)
+        }
+    }
+
+    /// Cuộn tới tin được trích dẫn, tô sáng 1.6 giây rồi nhả.
+    private func jump(to target: Int?, proxy: ScrollViewProxy) {
+        guard let target else { return }
+        withAnimation(.easeInOut(duration: 0.3)) {
+            proxy.scrollTo(target, anchor: .center)
+        }
+        withAnimation(.easeIn(duration: 0.2)) { highlightedID = target }
+        scrollTarget = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            guard highlightedID == target else { return }
+            withAnimation(.easeOut(duration: 0.5)) { highlightedID = nil }
         }
     }
 
