@@ -85,22 +85,32 @@ private struct HomeBackButton: ViewModifier {
             if let goHome {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: goHome) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "chevron.left")
-                                .font(.system(size: 13, weight: .bold))
-                            Image(systemName: "square.grid.2x2.fill")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(
-                                    LinearGradient(colors: AppTab.practice.colors, startPoint: .top, endPoint: .bottom)
-                                )
-                            Text("Trang chủ")
+                        if #available(iOS 26.0, *) {
+                            // Thanh công cụ iOS 26 tự bọc kính, coi nút có ảnh là nút chỉ-icon (bỏ chữ) và ép
+                            // nút leading vào bề rộng hẹp (chữ thành "…"): dùng Label ép hiện cả chữ lẫn icon,
+                            // fixedSize để lấy đúng bề rộng nội dung.
+                            Label("Trang chủ", systemImage: "chevron.left")
+                                .labelStyle(.titleAndIcon)
                                 .font(.subheadline.weight(.semibold))
+                                .fixedSize()
+                        } else {
+                            HStack(spacing: 6) {
+                                Image(systemName: "chevron.left")
+                                    .font(.system(size: 13, weight: .bold))
+                                Image(systemName: "square.grid.2x2.fill")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(
+                                        LinearGradient(colors: AppTab.practice.colors, startPoint: .top, endPoint: .bottom)
+                                    )
+                                Text("Trang chủ")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .foregroundStyle(.primary)
+                            .padding(.leading, 11)
+                            .padding(.trailing, 14)
+                            .padding(.vertical, 8)
+                            .glassCapsule()
                         }
-                        .foregroundStyle(.primary)
-                        .padding(.leading, 11)
-                        .padding(.trailing, 14)
-                        .padding(.vertical, 8)
-                        .glassCapsule()
                     }
                     .buttonStyle(PressableStyle())
                     .accessibilityLabel("Về trang chủ")
@@ -116,16 +126,36 @@ extension View {
     }
 }
 
+
 // MARK: - Kính mờ
 
+/// iOS 26 trở lên dùng Liquid Glass của hệ thống (`glassEffect`): kính khúc xạ, viền sáng và phản ứng
+/// khi chạm đều do hệ thống vẽ. Máy cũ hơn giữ bản kính vẽ tay bên dưới.
 private struct GlassBackground<S: InsettableShape>: ViewModifier {
     let shape: S
     var tint: Color = .clear
-    /// Kính thật (làm nhoè phần phía sau) rất tốn khi nền phía sau thay đổi. Thẻ lớn đặt trên nền đã
-    /// nhoè sẵn thì dùng lớp trắng trong suốt: nhìn gần như y hệt mà nhẹ hơn nhiều.
+    /// (Máy cũ) Kính thật (làm nhoè phần phía sau) rất tốn khi nền phía sau thay đổi. Thẻ lớn đặt trên
+    /// nền đã nhoè sẵn thì dùng lớp trắng trong suốt: nhìn gần như y hệt mà nhẹ hơn nhiều.
     var material = true
+    /// Kính phản ứng khi chạm (sáng lên, nảy nhẹ): bật cho thẻ và nút bấm được.
+    var interactive = false
 
     func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content.glassEffect(liquidGlass, in: shape)
+        } else {
+            legacy(content)
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private var liquidGlass: Glass {
+        var glass: Glass = .regular
+        if tint != .clear { glass = glass.tint(tint) }
+        return glass.interactive(interactive)
+    }
+
+    private func legacy(_ content: Content) -> some View {
         content
             .background {
                 if material {
@@ -148,23 +178,48 @@ private struct GlassBackground<S: InsettableShape>: ViewModifier {
 }
 
 extension View {
-    func glassCapsule(tint: Color = .clear) -> some View {
-        modifier(GlassBackground(shape: Capsule(), tint: tint))
+    func glassCapsule(tint: Color = .clear, interactive: Bool = false) -> some View {
+        modifier(GlassBackground(shape: Capsule(), tint: tint, interactive: interactive))
     }
 
-    func glassCard(cornerRadius: CGFloat, tint: Color = .clear) -> some View {
+    func glassCard(cornerRadius: CGFloat, tint: Color = .clear, interactive: Bool = false) -> some View {
         modifier(GlassBackground(shape: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
-                                 tint: tint, material: false))
+                                 tint: tint, material: false, interactive: interactive))
     }
 }
 
 /// Nhấn xuống thì lún nhẹ, như icon trên màn hình iPhone.
+///
+/// Chỉ dùng scale + opacity (biến đổi lớp, rẻ). Bản trước thêm `.brightness`: đó là bộ lọc, buộc vẽ lại
+/// cả nút ra bộ đệm riêng ở mỗi khung hình nên nhấn bị khựng. Lò xo ít nảy hơn để không giật khi
+/// hiệu ứng mở tính năng bắt đầu ngay sau khi thả tay.
 struct PressableStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.9 : 1)
-            .brightness(configuration.isPressed ? -0.06 : 0)
-            .animation(.spring(response: 0.25, dampingFraction: 0.6), value: configuration.isPressed)
+            .scaleEffect(configuration.isPressed ? 0.94 : 1)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(.spring(response: 0.22, dampingFraction: 0.85), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Điểm xuất phát hiệu ứng mở
+
+/// Nơi người dùng chạm trên màn hình chính, để tính năng phóng ra đúng từ đó.
+/// Cùng một tính năng có thể mở từ icon lẫn thẻ (ví dụ Hội thoại: icon ở dock và thẻ chuỗi ngày).
+enum HomeSource: Hashable {
+    case icon(AppTab)
+    case widget(AppTab)
+}
+
+extension View {
+    /// Đánh dấu view là điểm xuất phát của hiệu ứng zoom hệ thống (iOS 18+); máy cũ không làm gì.
+    @ViewBuilder
+    func homeZoomSource(_ source: HomeSource, in namespace: Namespace.ID) -> some View {
+        if #available(iOS 18.0, *) {
+            matchedTransitionSource(id: source, in: namespace)
+        } else {
+            self
+        }
     }
 }
 
@@ -221,7 +276,9 @@ struct HomeScreenView: View {
     let badges: [AppTab: Int]
     let streak: StreakStore.Summary
     let frames: IconFrameRegistry
-    let onOpen: (AppTab) -> Void
+    /// Namespace của hiệu ứng zoom: icon / thẻ đăng ký làm điểm xuất phát, ContentView dùng khi mở.
+    let namespace: Namespace.ID
+    let onOpen: (AppTab, HomeSource) -> Void
 
     @State private var appeared = false
 
@@ -233,7 +290,7 @@ struct HomeScreenView: View {
             VStack(spacing: 0) {
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 18) {
-                        MicLiveBanner { onOpen(.keyboard) }
+                        MicLiveBanner(namespace: namespace) { onOpen(.keyboard, .widget(.keyboard)) }
                         dateHeader
                         streakWidget
                         HStack(spacing: 14) {
@@ -244,9 +301,11 @@ struct HomeScreenView: View {
                             ForEach(Array(AppTab.grid.enumerated()), id: \.element) { index, app in
                                 Group {
                                     if app == .keyboard {
-                                        KeyboardAppIcon(frames: frames) { onOpen(app) }
+                                        KeyboardAppIcon(frames: frames, namespace: namespace) { onOpen(app, .icon(app)) }
                                     } else {
-                                        HomeAppIcon(app: app, badge: badges[app] ?? 0, frames: frames) { onOpen(app) }
+                                        HomeAppIcon(app: app, badge: badges[app] ?? 0, frames: frames, namespace: namespace) {
+                                            onOpen(app, .icon(app))
+                                        }
                                     }
                                 }
                                 .appear(appeared, delay: 0.18 + 0.05 * Double(index))
@@ -303,7 +362,7 @@ struct HomeScreenView: View {
 
     /// Chuỗi ngày: gấu trúc, số ngày liên tiếp, vòng tiến độ câu hôm nay. Chạm để mở Hội thoại.
     private var streakWidget: some View {
-        Button { onOpen(.conversation) } label: {
+        Button { onOpen(.conversation, .widget(.conversation)) } label: {
             HStack(spacing: 14) {
                 MascotView(mood: MascotMood(streak), size: 72, animated: false)
                 VStack(alignment: .leading, spacing: 4) {
@@ -341,10 +400,11 @@ struct HomeScreenView: View {
             }
             .foregroundStyle(.white)
             .padding(16)
-            .glassCard(cornerRadius: 28, tint: .white.opacity(0.04))
+            .glassCard(cornerRadius: 28, tint: .white.opacity(0.04), interactive: true)
             .environment(\.colorScheme, .dark)
         }
         .buttonStyle(PressableStyle())
+        .homeZoomSource(.widget(.conversation), in: namespace)
         .appear(appeared, delay: 0.05)
     }
 
@@ -363,7 +423,7 @@ struct HomeScreenView: View {
     }
 
     private func smallWidget(app: AppTab, value: String, caption: String, detail: String) -> some View {
-        Button { onOpen(app) } label: {
+        Button { onOpen(app, .widget(app)) } label: {
             VStack(alignment: .leading, spacing: 6) {
                 Image(systemName: app.symbol)
                     .font(.system(size: 15, weight: .semibold))
@@ -386,26 +446,47 @@ struct HomeScreenView: View {
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity, minHeight: 138, alignment: .leading)
             .padding(14)
-            .glassCard(cornerRadius: 24, tint: .white.opacity(0.04))
+            .glassCard(cornerRadius: 24, tint: .white.opacity(0.04), interactive: true)
             .environment(\.colorScheme, .dark)
         }
         .buttonStyle(PressableStyle())
+        .homeZoomSource(.widget(app), in: namespace)
     }
 
     // MARK: Dock
 
+    /// Dock: 4 icon trên một tấm kính, hiện lên như một khối.
     private var dock: some View {
         HStack(spacing: 0) {
-            ForEach(Array(AppTab.dock.enumerated()), id: \.element) { index, app in
-                HomeAppIcon(app: app, badge: badges[app] ?? 0, showsLabel: false, frames: frames) { onOpen(app) }
-                    .frame(maxWidth: .infinity)
-                    .appear(appeared, delay: 0.2 + 0.04 * Double(index))
+            ForEach(AppTab.dock, id: \.self) { app in
+                HomeAppIcon(app: app, badge: badges[app] ?? 0, showsLabel: false, frames: frames, namespace: namespace) {
+                    onOpen(app, .icon(app))
+                }
+                .frame(maxWidth: .infinity)
             }
         }
         .padding(.vertical, 14)
         .padding(.horizontal, 6)
-        .glassCard(cornerRadius: 36, tint: .white.opacity(0.06))
+        .frame(maxWidth: .infinity)
+        .background { dockGlass }
         .environment(\.colorScheme, .dark)
+        .appear(appeared, delay: 0.2)
+    }
+
+    /// Kính của dock là lớp nền nằm *cạnh* các icon, không bọc ngoài chúng.
+    ///
+    /// Icon trong dock là điểm xuất phát của hiệu ứng zoom (`matchedTransitionSource`). iOS 26 không
+    /// hỗ trợ điểm xuất phát nằm bên trong nội dung của một tấm kính: sau khi đóng tính năng, tấm kính
+    /// bọc ngoài vẽ ra khối trắng đục mất bo góc trên máy thật. Các thẻ khác không sao vì thẻ tự là điểm
+    /// xuất phát và kính nằm bên trong thẻ.
+    @ViewBuilder
+    private var dockGlass: some View {
+        let shape = RoundedRectangle(cornerRadius: 36, style: .continuous)
+        if #available(iOS 26.0, *) {
+            shape.fill(.clear).glassEffect(.regular, in: shape)
+        } else {
+            Color.clear.glassCard(cornerRadius: 36, tint: .white.opacity(0.06))
+        }
     }
 }
 
@@ -423,11 +504,13 @@ private struct VocabularyWidget<Content: View>: View {
 /// chỉ riêng icon này vẽ lại chứ không phải cả màn hình chính.
 private struct KeyboardAppIcon: View {
     let frames: IconFrameRegistry
+    let namespace: Namespace.ID
     let action: () -> Void
     @ObservedObject private var voice = VoiceEngine.shared
 
     var body: some View {
-        HomeAppIcon(app: .keyboard, badge: 0, micActive: voice.state.sessionActive, frames: frames, action: action)
+        HomeAppIcon(app: .keyboard, badge: 0, micActive: voice.state.sessionActive, frames: frames,
+                    namespace: namespace, action: action)
     }
 }
 
@@ -438,12 +521,14 @@ private struct HomeAppIcon: View {
     /// Chỉ icon Bàn phím có: micro đang bật (true) hay tắt (false).
     var micActive: Bool?
     let frames: IconFrameRegistry
+    let namespace: Namespace.ID
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
                 icon
+                    // Khung icon chỉ cần cho hiệu ứng mở tự vẽ trên iOS 16–17.
                     .background(
                         GeometryReader { geo in
                             let frame = geo.frame(in: .global)
@@ -473,30 +558,30 @@ private struct HomeAppIcon: View {
         return parts.joined(separator: ", ")
     }
 
-    /// Icon bóng kính: màu nền, vệt sáng phía trên, viền phản quang, biểu tượng nổi nhẹ.
+    /// Icon kiểu iOS mới: mảng màu chuyển sắc phẳng, viền kính mảnh, biểu tượng nổi nhẹ.
+    /// Bản trước có vệt sáng loáng nửa trên và viền phản quang đậm, nhìn như icon iOS đời đầu.
     private var icon: some View {
         let shape = RoundedRectangle(cornerRadius: 18, style: .continuous)
         return shape
             .fill(LinearGradient(colors: app.colors, startPoint: .topLeading, endPoint: .bottomTrailing))
-            .overlay(
-                shape.fill(LinearGradient(colors: [.white.opacity(0.42), .white.opacity(0.05), .clear],
-                                          startPoint: .top, endPoint: .center))
-            )
-            .overlay(
-                shape.strokeBorder(
-                    LinearGradient(colors: [.white.opacity(0.8), .white.opacity(0.1), .white.opacity(0.35)],
-                                   startPoint: .topLeading, endPoint: .bottomTrailing),
-                    lineWidth: 1.2
-                )
-            )
+            .overlay(shape.strokeBorder(.white.opacity(0.28), lineWidth: 0.8))
             .frame(width: 62, height: 62)
             .overlay {
                 Image(systemName: app.symbol)
                     .font(.system(size: 27, weight: .semibold))
                     .foregroundStyle(.white)
-                    .shadow(color: .black.opacity(0.22), radius: 3, y: 2)
+                    .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
             }
-            .shadow(color: app.colors[app.colors.count - 1].opacity(0.45), radius: 10, y: 6)
+            // Điểm xuất phát của hiệu ứng zoom chỉ là ô vuông icon: sau hiệu ứng, hệ thống giữ view xuất
+            // phát ở chế độ cắt theo khung và coi nó là khối vuông đục, nên huy hiệu, vòng sáng micro và
+            // bóng đổ phải nằm ngoài nó. Bóng không dùng `.shadow` (sẽ bị vẽ thành hình vuông sau khi về
+            // trang chủ) mà là lớp nền riêng: hình bo góc cùng màu, làm nhoè và đẩy xuống.
+            .homeZoomSource(.icon(app), in: namespace)
+            .background {
+                shape.fill(app.colors[app.colors.count - 1].opacity(0.35))
+                    .blur(radius: 10)
+                    .offset(y: 6)
+            }
             .overlay(alignment: .topTrailing) {
                 if badge > 0 {
                     Text(badge > 999 ? "999+" : "\(badge)")
@@ -556,6 +641,7 @@ private struct MicGlowRing: View {
 /// Viên báo micro bàn phím đang bật ở đầu màn hình chính, kiểu chỉ báo ghi âm của iPhone.
 /// Tự theo dõi micro nên chỉ riêng viên này vẽ lại khi trạng thái bàn phím đổi.
 private struct MicLiveBanner: View {
+    let namespace: Namespace.ID
     let onTap: () -> Void
     @ObservedObject private var voice = VoiceEngine.shared
 
@@ -588,6 +674,7 @@ private struct MicLiveBanner: View {
                     .shadow(color: .green.opacity(0.45), radius: 10, y: 4)
                 }
                 .buttonStyle(PressableStyle())
+                .homeZoomSource(.widget(.keyboard), in: namespace)
                 .transition(.move(edge: .top).combined(with: .opacity))
                 .accessibilityLabel("Micro bàn phím đang bật. Mở trang bàn phím")
             }

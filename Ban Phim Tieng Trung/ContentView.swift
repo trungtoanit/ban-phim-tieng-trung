@@ -21,6 +21,10 @@ enum AppTab: Hashable {
     case rooms
 }
 
+extension AppTab: Identifiable {
+    var id: AppTab { self }
+}
+
 struct ContentView: View {
     /// Tính năng đang mở; nil là đang ở màn hình chính.
     @Binding var tab: AppTab?
@@ -30,8 +34,12 @@ struct ContentView: View {
     /// Số câu còn phải đọc hôm nay, hiện thành số đỏ trên icon Hội thoại; đủ mục tiêu thì ẩn.
     @State private var streak = StreakStore.summary()
     @State private var iconFrames = IconFrameRegistry()
-    /// Tính năng đã phủ kín màn hình: tạm ẩn màn hình chính để không phải vẽ nó phía sau.
+    /// (iOS 16–17) Tính năng đã phủ kín màn hình: tạm ẩn màn hình chính để không phải vẽ nó phía sau.
     @State private var homeHidden = false
+    /// Hiệu ứng zoom hệ thống (iOS 18+): icon / thẻ trên màn hình chính là điểm xuất phát.
+    @Namespace private var zoomNamespace
+    /// Nơi vừa chạm để mở tính năng đang mở.
+    @State private var zoomSource: HomeSource?
     @AppStorage(StreakStore.goalKey, store: SharedSettings.store)
     private var dailyGoal = StreakStore.defaultGoal
     @Environment(\.scenePhase) private var scenePhase
@@ -43,26 +51,12 @@ struct ContentView: View {
     }
 
     var body: some View {
-        GeometryReader { geo in
-            ZStack {
-                HomeScreenView(badges: badges, streak: streak, frames: iconFrames) { app in
-                    tab = app
-                }
-                .frame(width: geo.size.width, height: geo.size.height)
-                .opacity(homeHidden ? 0 : 1)
-                .allowsHitTesting(!homeHidden)
-
-                if let open = tab {
-                    feature(open)
-                        .frame(width: geo.size.width, height: geo.size.height)
-                        .environment(\.goHome) { tab = nil }
-                        .background(Color(.systemGroupedBackground).ignoresSafeArea())
-                        // Mở ra phóng từ đúng icon vừa chạm, đóng lại thu về icon đó.
-                        .transition(.scale(scale: 0.06, anchor: anchor(for: open, in: geo)).combined(with: .opacity))
-                        .zIndex(1)
-                }
+        Group {
+            if #available(iOS 18.0, *) {
+                zoomLayout
+            } else {
+                legacyLayout
             }
-            .animation(.spring(response: 0.42, dampingFraction: 0.86), value: tab)
         }
         .task { await refreshRoomsOnline() }
         .onChange(of: tab) { open in
@@ -95,6 +89,52 @@ struct ContentView: View {
             refreshStreak()
         }
         .onChange(of: dailyGoal) { _ in refreshStreak() }
+    }
+
+    private var homeScreen: some View {
+        HomeScreenView(badges: badges, streak: streak, frames: iconFrames, namespace: zoomNamespace) { app, source in
+            zoomSource = source
+            tab = app
+        }
+    }
+
+    /// iOS 18+: tính năng phủ toàn màn hình bằng hiệu ứng zoom của hệ thống, phóng ra từ đúng icon / thẻ
+    /// vừa chạm, vuốt từ mép trái để về. Hệ thống chụp ảnh màn hình chính rồi chạy hiệu ứng, nên không
+    /// khựng dù tính năng bên trong (danh sách, mạng) đang dựng.
+    @available(iOS 18.0, *)
+    private var zoomLayout: some View {
+        homeScreen
+            .fullScreenCover(item: $tab) { open in
+                featureScreen(open)
+                    .navigationTransition(.zoom(sourceID: zoomSource ?? .icon(open), in: zoomNamespace))
+            }
+    }
+
+    /// iOS 16–17: tự phóng tính năng ra từ icon bằng transition scale, đóng lại thu về icon đó.
+    private var legacyLayout: some View {
+        GeometryReader { geo in
+            ZStack {
+                homeScreen
+                    .frame(width: geo.size.width, height: geo.size.height)
+                    .opacity(homeHidden ? 0 : 1)
+                    .allowsHitTesting(!homeHidden)
+
+                if let open = tab {
+                    featureScreen(open)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .transition(.scale(scale: 0.06, anchor: anchor(for: open, in: geo)).combined(with: .opacity))
+                        .zIndex(1)
+                }
+            }
+            .animation(.spring(response: 0.42, dampingFraction: 0.86), value: tab)
+        }
+    }
+
+    private func featureScreen(_ app: AppTab) -> some View {
+        feature(app)
+            .environment(\.goHome) { tab = nil }
+            .background(Color(.systemGroupedBackground).ignoresSafeArea())
+            .tint(Color(red: 0.86, green: 0.17, blue: 0.16))
     }
 
     /// Hỏi một lần khi về màn hình chính / mở lại app, không hỏi định kỳ.

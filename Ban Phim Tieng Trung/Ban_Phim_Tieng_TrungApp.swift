@@ -22,6 +22,10 @@ struct Ban_Phim_Tieng_TrungApp: App {
 
     init() {
         StreakStore.raiseGoalIfNeeded()
+        // Nút trong ScrollView (màn hình chính, danh sách) mặc định đợi ~150 ms để phân biệt chạm với
+        // cuộn rồi mới hiện trạng thái nhấn, nên bấm thấy trễ. Tắt đợi: nhấn là lún ngay như màn hình
+        // chính iPhone; bắt đầu kéo thì scroll view vẫn huỷ chạm và cuộn bình thường.
+        UIScrollView.appearance().delaysContentTouches = false
         // Đã đăng nhập thì mở đồng bộ iCloud ngay từ đầu, để mở app là thấy tiến độ máy khác.
         if AccountStore.shared.isSignedIn { CloudSync.shared.start() }
         // Đã đăng nhập website: dùng giọng đọc của máy chủ giống trang web (không cần khoá riêng).
@@ -58,8 +62,10 @@ struct Ban_Phim_Tieng_TrungApp: App {
                 VoiceEngine.shared.activate()
             }
             // Vừa đăng nhập xong (màn đăng nhập hay form trong tính năng nào): về trang chủ.
-            .onChange(of: web.user?.id) { newID in
-                guard newID != nil, !openedFromKeyboard else { return }
+            // Đăng xuất (trong Hồ sơ / tường) cũng về trang chủ, để màn mời đăng nhập ở trên không bị
+            // tính năng đang phủ toàn màn hình che mất.
+            .onChange(of: web.user?.id) { _ in
+                guard !openedFromKeyboard else { return }
                 withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { tab = nil }
             }
             // Icon ngoài màn hình chính đi theo tâm trạng gấu trúc.
