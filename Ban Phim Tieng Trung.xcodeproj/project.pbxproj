@@ -20,6 +20,7 @@
 		B10000000000000000000107 /* VoiceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000A /* VoiceSettingsView.swift */; };
 		B10000000000000000000108 /* ChinesePinyin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* ChinesePinyin.swift */; };
 		B10000000000000000000109 /* pinyin-dict.json in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000C /* pinyin-dict.json */; };
+		E9D536E215DA46F63637F661 /* lexicon.txt in Resources */ = {isa = PBXBuildFile; fileRef = EE5307A6261951BCC4EE21E3 /* lexicon.txt */; };
 		B1000000000000000000010A /* hanviet.json in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* hanviet.json */; };
 		B1000000000000000000010B /* SpeechCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000E /* SpeechCapture.swift */; };
 		B1000000000000000000010C /* ConversationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000F /* ConversationModel.swift */; };
@@ -38,6 +39,7 @@
 		B10000000000000000000133 /* ChinesePinyin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000B /* ChinesePinyin.swift */; };
 		B10000000000000000000134 /* Translator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000002 /* Translator.swift */; };
 		B10000000000000000000135 /* pinyin-dict.json in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000C /* pinyin-dict.json */; };
+		32BE1D2A0DC4DFF227A0EE7A /* lexicon.txt in Resources */ = {isa = PBXBuildFile; fileRef = EE5307A6261951BCC4EE21E3 /* lexicon.txt */; };
 		B10000000000000000000136 /* PhraseMatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000013 /* PhraseMatcher.swift */; };
 		B10000000000000000000137 /* NaturalSpeaker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000009 /* NaturalSpeaker.swift */; };
 		B10000000000000000000138 /* hanviet.json in Resources */ = {isa = PBXBuildFile; fileRef = B1000000000000000000000D /* hanviet.json */; };
@@ -119,6 +121,7 @@
 		B1000000000000000000000A /* VoiceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceSettingsView.swift; sourceTree = "<group>"; };
 		B1000000000000000000000B /* ChinesePinyin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChinesePinyin.swift; sourceTree = "<group>"; };
 		B1000000000000000000000C /* pinyin-dict.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "pinyin-dict.json"; sourceTree = "<group>"; };
+		EE5307A6261951BCC4EE21E3 /* lexicon.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = lexicon.txt; sourceTree = "<group>"; };
 		B1000000000000000000000D /* hanviet.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = hanviet.json; sourceTree = "<group>"; };
 		B1000000000000000000000E /* SpeechCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechCapture.swift; sourceTree = "<group>"; };
 		B1000000000000000000000F /* ConversationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationModel.swift; sourceTree = "<group>"; };
@@ -213,6 +216,7 @@
 				B10000000000000000000002 /* Translator.swift */,
 				B1000000000000000000000B /* ChinesePinyin.swift */,
 				B1000000000000000000000C /* pinyin-dict.json */,
+				EE5307A6261951BCC4EE21E3 /* lexicon.txt */,
 				B1000000000000000000000D /* hanviet.json */,
 				B10000000000000000000006 /* PracticeModel.swift */,
 				B10000000000000000000007 /* PracticeView.swift */,
@@ -375,6 +379,7 @@
 				04DC04AF3057BAFA00AE3DF2 /* Assets.xcassets in Resources */,
 				B10000000000000000000105 /* phrases.json in Resources */,
 				B10000000000000000000109 /* pinyin-dict.json in Resources */,
+				E9D536E215DA46F63637F661 /* lexicon.txt in Resources */,
 				B1000000000000000000010A /* hanviet.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -384,6 +389,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B10000000000000000000135 /* pinyin-dict.json in Resources */,
+				32BE1D2A0DC4DFF227A0EE7A /* lexicon.txt in Resources */,
 				B10000000000000000000138 /* hanviet.json in Resources */,
 				B10000000000000000000139 /* replies.json in Resources */,
 			);

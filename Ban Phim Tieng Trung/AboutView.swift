@@ -234,6 +234,9 @@ struct AboutView: View {
             if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
                 Text("Phiên bản \(version)")
             }
+            Text("Từ điển tách từ & pinyin: CC-CEDICT (CC BY-SA 4.0), jieba (MIT)")
+                .multilineTextAlignment(.center)
+                .padding(.top, 4)
         }
         .font(.caption)
         .foregroundStyle(.secondary)

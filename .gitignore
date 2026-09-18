@@ -12,3 +12,6 @@ build/
 
 # Khoá đăng nhập giả lập (chỉ trên máy dev)
 *.local.xcconfig
+
+# Du lieu tai ve cua Tools/build_lexicon.py
+Tools/.cache/
