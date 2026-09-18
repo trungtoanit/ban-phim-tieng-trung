@@ -609,6 +609,61 @@ struct RoomsOnline {
     let rooms: [Int: Int]
 }
 
+/// Một dòng trong "Top luyện nói tuần này" (action=week_top) — giống thẻ ở cột phải trang Hội thoại trên web.
+struct WeekTopEntry: Decodable, Identifiable, Hashable {
+    let id: Int
+    let name: String
+    let username: String?
+    let avatar: String?
+    var rank = 0
+    var medal: String?
+    var sentences = 0
+    /// Câu nói chuẩn (AI không phải sửa).
+    var clean = 0
+    var isMe = false
+
+    var initial: String { String(name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased() }
+    var avatarURL: URL? { avatar.flatMap(URL.init(string:)) }
+
+    enum CodingKeys: String, CodingKey { case id, name, username, avatar, rank, medal, sentences, clean, isMe }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(Int.self, forKey: .id)
+        name = (try? c.decodeIfPresent(String.self, forKey: .name)) ?? "Người học #\(id)"
+        username = (try? c.decodeIfPresent(String.self, forKey: .username)) ?? nil
+        avatar = (try? c.decodeIfPresent(String.self, forKey: .avatar)) ?? nil
+        rank = (try? c.decodeIfPresent(Int.self, forKey: .rank)) ?? 0
+        medal = (try? c.decodeIfPresent(String.self, forKey: .medal)) ?? nil
+        sentences = (try? c.decodeIfPresent(Int.self, forKey: .sentences)) ?? 0
+        clean = (try? c.decodeIfPresent(Int.self, forKey: .clean)) ?? 0
+        isMe = (try? c.decodeIfPresent(Bool.self, forKey: .isMe)) ?? false
+    }
+}
+
+/// Bảng xếp hạng luyện nói tuần này: top 10 + hạng của mình nếu ngoài top.
+struct WeekTop: Decodable, Hashable {
+    var top: [WeekTopEntry] = []
+    var me: WeekTopEntry?
+    /// Số người đã nói ít nhất 1 câu trong tuần.
+    var total = 0
+
+    enum CodingKeys: String, CodingKey { case top, me, total }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        top = (try? c.decodeIfPresent([WeekTopEntry].self, forKey: .top)) ?? []
+        me = (try? c.decodeIfPresent(WeekTopEntry.self, forKey: .me)) ?? nil
+        total = (try? c.decodeIfPresent(Int.self, forKey: .total)) ?? 0
+    }
+
+    /// Mình đang ngoài top: cần hiện thêm dòng của mình ở cuối.
+    var meOutsideTop: WeekTopEntry? {
+        guard let me, !top.contains(where: \.isMe) else { return nil }
+        return me
+    }
+}
+
 enum SocialAPI {
     private struct Envelope: Decodable {
         let ok: Bool
@@ -796,6 +851,13 @@ enum SocialAPI {
     // MARK: Bảng vàng
 
     /// Top 3 các tuần gần nhất (tuần mới nhất trước).
+    /// Top luyện nói tuần này (mọi người học, tính như huy chương tuần).
+    static func weekTop() async throws -> WeekTop {
+        let data = try await request("week_top", method: "GET")
+        guard let top = try? JSONDecoder().decode(WeekTop.self, from: data) else { throw missing }
+        return top
+    }
+
     static func awards(weeks: Int = 8) async throws -> [AwardWeek] {
         try await call("awards", ["weeks": weeks], method: "GET").weeks ?? []
     }

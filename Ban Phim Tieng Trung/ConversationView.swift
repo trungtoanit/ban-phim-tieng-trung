@@ -18,6 +18,8 @@ struct ConversationTopicsView: View {
     @State private var creatingOnWeb = false
     /// Thống kê của tài khoản website (chuỗi, câu hôm nay, mục tiêu) — giống cột phải trên web.
     @State private var webStats: WebConversationAPI.Stats?
+    /// Top luyện nói tuần này — giống thẻ 🏆 ở cột phải trang Hội thoại trên web.
+    @State private var weekTop: WeekTop?
     /// Màn "Đang chuẩn bị tình huống…" trong lúc AI tạo tình huống (5–20 giây).
     @State private var preparingTitle: String?
     @State private var preparingDone = false
@@ -102,6 +104,11 @@ struct ConversationTopicsView: View {
                         }
                     }
                     withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) { webStats = state.stats }
+                    Task {
+                        if let top = try? await SocialAPI.weekTop() {
+                            await MainActor.run { withAnimation(.easeOut(duration: 0.25)) { weekTop = top } }
+                        }
+                    }
                     webLoading = false
                     webError = nil
                 }
@@ -183,6 +190,13 @@ struct ConversationTopicsView: View {
                         }
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 12, trailing: 16))
+                    }
+                    if let weekTop {
+                        Section {
+                            WeekTopCard(board: weekTop)
+                        }
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 12, trailing: 16))
                     }
                 }
 
@@ -2357,6 +2371,91 @@ struct WebStatsCard: View {
                 .frame(height: 14)
             }
         }
+    }
+}
+
+// MARK: - Top luyện nói tuần này (giống thẻ 🏆 trên web)
+
+struct WeekTopCard: View {
+    let board: WeekTop
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("🏆 Top luyện nói tuần này")
+                    .font(.subheadline.weight(.bold))
+                Text("Tính từ thứ Hai · số câu nói trong Hội thoại · top 3 nhận huy chương")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            if board.top.isEmpty {
+                Text("Tuần này chưa ai luyện nói — nói câu đầu tiên để đứng đầu bảng! 💪")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 2) {
+                    ForEach(board.top) { row($0) }
+                    if let me = board.meOutsideTop {
+                        Text("⋯").font(.footnote).foregroundStyle(.tertiary)
+                        row(me)
+                        if let last = board.top.last {
+                            Text("Nói thêm \(last.sentences - me.sentences + 1) câu để vào top \(board.top.count)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if board.me == nil {
+                        Text("Bạn chưa nói câu nào tuần này · \(board.total) người đang đua")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 4)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color(.secondarySystemGroupedBackground)))
+    }
+
+    private func row(_ entry: WeekTopEntry) -> some View {
+        HStack(spacing: 10) {
+            Group {
+                if let medal = entry.medal {
+                    Text(medal).font(.system(size: 18))
+                } else {
+                    Text("\(entry.rank)")
+                        .font(.footnote.weight(.heavy))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 26)
+            SocialAvatar(url: entry.avatarURL, initial: entry.initial, size: 32)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(entry.name + (entry.isMe ? " (bạn)" : ""))
+                    .font(.footnote.weight(.semibold))
+                    .lineLimit(1)
+                Text("\(entry.clean) câu chuẩn")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            VStack(alignment: .trailing, spacing: 0) {
+                Text("\(entry.sentences)")
+                    .font(.callout.weight(.heavy))
+                    .foregroundStyle(.red)
+                Text("câu")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 5)
+        .padding(.horizontal, 8)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(entry.isMe ? Color.red.opacity(0.1) : Color.clear))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Hạng \(entry.rank), \(entry.name)\(entry.isMe ? ", bạn" : ""), \(entry.sentences) câu, \(entry.clean) câu chuẩn")
     }
 }
 
