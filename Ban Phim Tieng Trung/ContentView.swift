@@ -45,9 +45,12 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     /// Số người đang trong phòng chat, hiện thành số trên icon Phòng chat (chỉ khi đã đăng nhập).
     @State private var roomsOnline = 0
+    /// Số từ đến hạn ôn hôm nay, hiện thành số đỏ trên icon Từ vựng.
+    @ObservedObject private var vocab = VocabularyStore.shared
 
     private var badges: [AppTab: Int] {
-        [.conversation: streak.remaining, .mistakes: mistakes.mistakes.count, .rooms: roomsOnline]
+        [.conversation: streak.remaining, .mistakes: mistakes.mistakes.count, .rooms: roomsOnline,
+         .vocabulary: vocab.sessionCount]
     }
 
     var body: some View {
