@@ -1,7 +1,12 @@
 //
 //  Vocabulary.swift
 //  Từ vựng người học tự thêm (chạm chữ Hán → "+ Từ vựng") và trò nối cặp chữ Hán – nghĩa.
-//  Mỗi từ phải nối đúng 15 lần mới tính là thuộc; thêm lại một từ thì học lại từ 0.
+//
+//  Học theo LẶP LẠI NGẮT QUÃNG (giống app/vocab.php trên web): mỗi từ có một bậc (`correct`, 0…8)
+//  và một hạn ôn `dueAt`. Nối đúng → lên 1 bậc, hạn ôn giãn ra theo `VocabularyStore.steps`
+//  (10 phút → 1 giờ → 1 ngày → 3 → 7 → 16 → 35 → 90 ngày); nối nhầm → lùi 2 bậc, ôn lại sau 10 phút.
+//  Qua `target` bậc là "đã thuộc" nhưng vẫn còn hạn ôn để khỏi quên. Mỗi lúc chỉ học dở tối đa
+//  `activeMax` từ, từ mới xếp hàng chờ tới lượt.
 //
 
 import Combine
@@ -15,21 +20,53 @@ struct VocabWord: Codable, Identifiable, Hashable {
     var py: String
     var vi: String
     var hv: String?
-    /// Số lần nối đúng (0…`VocabularyStore.target`).
+    /// Bậc lặp lại ngắt quãng (0…`VocabularyStore.maxStage`).
     var correct = 0
     var addedAt = Date()
     var lastPracticed: Date?
+    /// Hạn ôn kế tiếp; `nil` = chưa hẹn (đến hạn ngay).
+    var dueAt: Date?
 
     var id: String { zh }
     var isLearned: Bool { correct >= VocabularyStore.target }
+    /// Đã bắt đầu học (khác với từ mới còn xếp hàng chờ tới lượt).
+    var isStarted: Bool { correct > 0 }
+    /// Đến hạn ôn lại (từ chưa bắt đầu không tính — còn chờ chỗ trống).
+    var isDue: Bool { isStarted && (dueAt ?? .distantPast) <= Date() }
 }
 
 final class VocabularyStore: ObservableObject {
     static let shared = VocabularyStore()
-    /// Nối đúng bấy nhiêu lần mới tính là thuộc.
-    static let target = 15
+    /// Qua bấy nhiêu bậc (ôn đúng đúng hạn) là thuộc.
+    static let target = 6
+    /// Bậc cao nhất — ôn lại mỗi 90 ngày.
+    static let maxStage = 8
+    /// Số từ "đang học dở" tối đa cùng lúc; từ mới chờ tới lượt.
+    static let activeMax = 20
+    /// Hạn ôn sau khi lên bậc 1…8, tính bằng PHÚT.
+    static let steps = [10, 60, 1440, 4320, 10080, 23040, 50400, 129600]
     /// Số cặp mỗi vòng.
     static let roundSize = 5
+    /// Số cặp tối thiểu mỗi vòng (ít ô quá thì đoán được ngay).
+    static let roundMin = 3
+
+    /// "10 phút nữa", "3 ngày nữa"… Quá hạn hoặc chưa hẹn thì trả về chuỗi rỗng.
+    static func dueText(_ date: Date?) -> String {
+        guard let date else { return "" }
+        let seconds = date.timeIntervalSinceNow
+        guard seconds > 0 else { return "" }
+        let minutes = Int((seconds / 60).rounded())
+        if minutes < 60 { return "\(max(minutes, 1)) phút nữa" }
+        let hours = Int((Double(minutes) / 60).rounded())
+        if hours < 24 { return "\(hours) giờ nữa" }
+        let days = Int((Double(hours) / 24).rounded())
+        return days < 30 ? "\(days) ngày nữa" : "\(Int((Double(days) / 30).rounded())) tháng nữa"
+    }
+
+    /// Hạn ôn sau khi lên bậc `stage`.
+    static func nextDue(stage: Int, from now: Date = Date()) -> Date {
+        now.addingTimeInterval(Double(steps[min(max(stage, 1), steps.count) - 1]) * 60)
+    }
 
     @Published private(set) var words: [VocabWord] = []
 
@@ -61,8 +98,27 @@ final class VocabularyStore: ObservableObject {
     private var localVersion = 0
     private var syncing = false
 
+    /// Đang học dở (đã bắt đầu, chưa thuộc).
     var learning: [VocabWord] {
-        words.filter { !$0.isLearned }.sorted { $0.addedAt > $1.addedAt }
+        words.filter { !$0.isLearned && $0.isStarted }.sorted { $0.addedAt > $1.addedAt }
+    }
+
+    /// Từ mới còn xếp hàng: chỉ vào học khi còn chỗ trong `activeMax`.
+    var queued: [VocabWord] {
+        words.filter { !$0.isStarted }.sorted { $0.addedAt > $1.addedAt }
+    }
+
+    /// Bài ôn hôm nay = từ đến hạn + số từ mới được phép nạp.
+    var dueWords: [VocabWord] {
+        words.filter(\.isDue).sorted { ($0.dueAt ?? .distantPast) < ($1.dueAt ?? .distantPast) }
+    }
+
+    var newAllowed: Int { max(0, min(queued.count, Self.activeMax - learning.count)) }
+    var sessionCount: Int { dueWords.count + newAllowed }
+
+    /// Khi nào có từ tiếp theo đến hạn (để báo "xong bài hôm nay").
+    var nextDueAt: Date? {
+        words.filter { $0.isStarted && !$0.isDue }.compactMap(\.dueAt).min()
     }
 
     var learned: [VocabWord] {
@@ -101,21 +157,28 @@ final class VocabularyStore: ObservableObject {
         return result
     }
 
-    /// Cộng 1 lần đúng trên máy; kết quả cả vòng gửi lên máy chủ bằng `recordRound`.
+    /// Nối đúng: lên 1 bậc và hẹn hạn ôn xa hơn. Kết quả cả vòng gửi lên máy chủ bằng `recordRound`.
     func recordCorrect(_ zh: String) {
         guard let index = words.firstIndex(where: { $0.zh == zh }) else { return }
-        words[index].correct = min(words[index].correct + 1, Self.target)
+        let stage = min(words[index].correct + 1, Self.maxStage)
+        words[index].correct = stage
+        words[index].dueAt = Self.nextDue(stage: stage)
+        words[index].lastPracticed = Date()
+        save()
+    }
+
+    /// Nối nhầm: lùi 2 bậc và ôn lại sau 10 phút (từ đã thuộc cũng quay về nhóm đang học).
+    func recordMissed(_ zh: String) {
+        guard let index = words.firstIndex(where: { $0.zh == zh }) else { return }
+        words[index].correct = max(0, words[index].correct - 2)
+        words[index].dueAt = Self.nextDue(stage: 1)
         words[index].lastPracticed = Date()
         save()
     }
 
     /// Hết một vòng nối từ: gửi từ đúng / nhầm lên máy chủ (mất mạng thì lần đồng bộ sau gửi số đúng).
     func recordRound(correct: [String], missed: [String]) {
-        let now = Date()
-        for zh in missed {
-            if let index = words.firstIndex(where: { $0.zh == zh }) { words[index].lastPracticed = now }
-        }
-        if !missed.isEmpty { save() }
+        for zh in missed where !correct.contains(zh) { recordMissed(zh) }
         guard WebAccountStore.shared.isSignedIn, !(correct.isEmpty && missed.isEmpty) else { return }
         Task { try? await VocabAPI.post(["action": "record", "correct": correct, "missed": missed]) }
     }
@@ -123,6 +186,7 @@ final class VocabularyStore: ObservableObject {
     func restart(_ zh: String) {
         guard let index = words.firstIndex(where: { $0.zh == zh }) else { return }
         words[index].correct = 0
+        words[index].dueAt = nil
         save()
         pushOrQueue(.restart, zh)
     }
@@ -196,6 +260,7 @@ final class VocabularyStore: ObservableObject {
                 "correct": word.correct, "addedAt": VocabAPI.iso.string(from: word.addedAt),
             ]
             if let practiced = word.lastPracticed { item["lastPracticed"] = VocabAPI.iso.string(from: practiced) }
+            if let due = word.dueAt { item["dueAt"] = VocabAPI.iso.string(from: due) }
             return item
         }
         guard let serverWords = try? await VocabAPI.sync(payload) else { return }
@@ -209,12 +274,20 @@ final class VocabularyStore: ObservableObject {
         }
     }
 
-    /// Chọn từ cho một vòng: từ ít lần đúng và lâu chưa luyện trước.
-    func nextRound() -> [VocabWord] {
-        Array(learning
-            .sorted { ($0.correct, $0.lastPracticed ?? .distantPast) < ($1.correct, $1.lastPracticed ?? .distantPast) }
-            .prefix(Self.roundSize))
-            .shuffled()
+    /// Chọn từ cho một vòng: TỪ ĐẾN HẠN ÔN trước, còn chỗ thì nạp thêm từ mới (không quá `activeMax`
+    /// từ đang học dở). `early` = ôn sớm khi đã hết bài hôm nay.
+    func nextRound(early: Bool = false) -> [VocabWord] {
+        var picked = Array(dueWords.prefix(Self.roundSize))
+        let slots = min(Self.roundSize - picked.count, newAllowed)
+        if slots > 0 { picked += queued.prefix(slots) }
+        // Ít ô quá thì đoán được ngay: mượn thêm từ sắp đến hạn cho đủ ô (ôn sớm thì lấy hẳn 1 vòng)
+        let need = picked.isEmpty ? (early ? Self.roundSize : 0) : Self.roundMin
+        if picked.count < need {
+            let soon = words.filter { word in !picked.contains { $0.zh == word.zh } }
+                .sorted { ($0.dueAt ?? .distantPast) < ($1.dueAt ?? .distantPast) }
+            picked += soon.prefix(need - picked.count)
+        }
+        return picked.shuffled()
     }
 
     /// Nghĩa ngắn cho ô nối: lấy nghĩa đầu tiên, bỏ phần giải thích dài.
@@ -236,6 +309,11 @@ final class VocabularyStore: ObservableObject {
             }
             if word.correct > current.correct { current.correct = word.correct; changed = true }
             if word.addedAt < current.addedAt { current.addedAt = word.addedAt; changed = true }
+            // Hạn ôn: lấy cái sớm hơn (chưa hẹn = đến hạn ngay)
+            if current.dueAt != nil, word.dueAt == nil || word.dueAt! < current.dueAt! {
+                current.dueAt = word.dueAt
+                changed = true
+            }
             if let practiced = word.lastPracticed, practiced > (current.lastPracticed ?? .distantPast) {
                 current.lastPracticed = practiced
                 changed = true
@@ -303,12 +381,27 @@ struct VocabularyTabView: View {
                     } header: {
                         Text("Đang học · \(store.learning.count)")
                     } footer: {
-                        Text("Nối đúng \(VocabularyStore.target) lần là thuộc. Vuốt sang trái để xoá.")
+                        Text("Nối đúng thì lần ôn sau giãn ra: 10 phút → 1 giờ → 1 ngày → 3 → 7 → 16 ngày. Vuốt sang trái để xoá.")
+                    }
+                }
+
+                if !store.queued.isEmpty {
+                    Section {
+                        ForEach(store.queued) { word in
+                            VocabRow(word: word)
+                                .swipeActions {
+                                    Button("Xoá", role: .destructive) { withAnimation { store.remove(word.zh) } }
+                                }
+                        }
+                    } header: {
+                        Text("Chờ tới lượt · \(store.queued.count)")
+                    } footer: {
+                        Text("Mỗi lúc chỉ học dở tối đa \(VocabularyStore.activeMax) từ — học xong từ nào thì từ ở đây vào thay.")
                     }
                 }
 
                 if !store.learned.isEmpty {
-                    Section("Đã thuộc · \(store.learned.count)") {
+                    Section {
                         ForEach(store.learned) { word in
                             VocabRow(word: word)
                                 .swipeActions {
@@ -317,6 +410,10 @@ struct VocabularyTabView: View {
                                         .tint(.orange)
                                 }
                         }
+                    } header: {
+                        Text("Đã thuộc · \(store.learned.count)")
+                    } footer: {
+                        Text("Vẫn ôn lại sau 35 rồi 90 ngày — nhầm lần nào thì từ đó quay về nhóm đang học.")
                     }
                 }
             }
@@ -333,28 +430,48 @@ struct VocabularyTabView: View {
     private var header: some View {
         VStack(spacing: 14) {
             HStack(spacing: 0) {
-                stat("\(store.learning.count)", "Đang học", accentRed)
+                stat("\(store.sessionCount)", "Cần ôn", accentRed)
+                Divider().frame(height: 36)
+                stat("\(store.learning.count)", "Đang học", .primary)
                 Divider().frame(height: 36)
                 stat("\(store.learned.count)", "Đã thuộc", correctGreen)
-                Divider().frame(height: 36)
-                stat("\(store.words.count)", "Tổng số", .primary)
             }
             Button {
                 playing = true
             } label: {
-                Label(store.learning.isEmpty ? "Chưa có từ để luyện" : "Luyện nối từ", systemImage: "square.grid.2x2.fill")
+                Label(playTitle, systemImage: "square.grid.2x2.fill")
                     .font(.headline)
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 14)
                     .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(accentRed.opacity(store.learning.isEmpty ? 0.4 : 1)))
+                        .fill(accentRed.opacity(store.words.isEmpty ? 0.4 : 1)))
             }
             .buttonStyle(.plain)
-            .disabled(store.learning.isEmpty)
+            .disabled(store.words.isEmpty)
+            Text(playHint)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
         .padding(16)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(.secondarySystemGroupedBackground)))
+    }
+
+    private var playTitle: String {
+        if store.words.isEmpty { return "Chưa có từ để luyện" }
+        return store.sessionCount > 0 ? "Ôn hôm nay · \(store.sessionCount) từ" : "Xong bài hôm nay · ôn sớm?"
+    }
+
+    private var playHint: String {
+        guard !store.words.isEmpty else { return "Chạm chữ Hán ở Luyện nói hoặc Hội thoại để thêm từ." }
+        if store.sessionCount > 0 {
+            let fresh = store.newAllowed > 0 ? " · \(store.newAllowed) từ mới" : ""
+            return "\(store.dueWords.count) từ đến hạn\(fresh)"
+        }
+        let left = VocabularyStore.dueText(store.nextDueAt)
+        return left.isEmpty ? "Thêm từ mới để học tiếp, hoặc ôn sớm cho chắc."
+                            : "Từ tiếp theo đến hạn \(left). Vẫn có thể ôn sớm."
     }
 
     private func stat(_ value: String, _ title: String, _ color: Color) -> some View {
@@ -372,6 +489,18 @@ struct VocabularyTabView: View {
 
 private struct VocabRow: View {
     let word: VocabWord
+
+    /// "Từ mới" / "Đến hạn ôn" / "Ôn 3 ngày nữa" — cho thấy lịch lặp lại ngắt quãng.
+    private var dueLabel: String {
+        guard word.isStarted else { return "Từ mới · chờ tới lượt" }
+        let left = VocabularyStore.dueText(word.dueAt)
+        if left.isEmpty { return "Đến hạn ôn" }
+        return word.isLearned ? "Ôn lại \(left)" : "Ôn \(left)"
+    }
+
+    private var dueColor: Color {
+        word.isDue ? accentRed : .secondary
+    }
 
     var body: some View {
         Button {
@@ -391,6 +520,9 @@ private struct VocabRow: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
+                    Text(dueLabel)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(dueColor)
                 }
                 Spacer()
                 ZStack {
@@ -462,8 +594,14 @@ struct MatchingGameView: View {
                     Image(systemName: "checkmark.seal.fill")
                         .font(.system(size: 52))
                         .foregroundStyle(.green)
-                    Text("Bạn đã thuộc hết từ đang học")
+                    Text("Xong bài hôm nay 🎉")
                         .font(.headline)
+                    Text(VocabularyStore.dueText(store.nextDueAt).isEmpty
+                         ? "Thêm từ mới từ Hội thoại để học tiếp nhé."
+                         : "Từ tiếp theo đến hạn \(VocabularyStore.dueText(store.nextDueAt)).")
+                        .font(.footnote)
+                        .foregroundStyle(.white.opacity(0.75))
+                        .multilineTextAlignment(.center)
                     Button { dismiss() } label: {
                         Text("Đóng")
                             .font(.headline)
@@ -479,7 +617,8 @@ struct MatchingGameView: View {
             }
         }
         .environment(\.colorScheme, .dark)
-        .onAppear(perform: startRound)
+        // Hết bài hôm nay mà vẫn mở trò chơi = người học muốn ôn sớm
+        .onAppear { startRound(early: store.sessionCount == 0) }
     }
 
     private var gameView: some View {
@@ -675,8 +814,15 @@ struct MatchingGameView: View {
         }
     }
 
-    private func startRound() {
-        let words = store.nextRound()
+    /// Vòng sau gặp lại từ này lúc nào (thay cho "+1" cũ).
+    private func resultNote(_ word: VocabWord, current: VocabWord?) -> String {
+        guard counted.contains(word.zh) else { return "nhầm · ôn lại sau 10 phút" }
+        let left = VocabularyStore.dueText(current?.dueAt)
+        return left.isEmpty ? "lên bậc" : "ôn \(left)"
+    }
+
+    private func startRound(early: Bool = false) {
+        let words = store.nextRound(early: early)
         round = words
         rightOrder = words.shuffled()
         if words.count > 1 {
@@ -722,7 +868,7 @@ struct MatchingGameView: View {
                             .foregroundStyle(.white.opacity(0.7))
                             .lineLimit(1)
                         Spacer()
-                        Text(counted.contains(word.zh) ? "+1" : "nhầm")
+                        Text(resultNote(word, current: current))
                             .font(.caption.weight(.bold))
                             .foregroundStyle(counted.contains(word.zh) ? .green : Color(red: 1, green: 0.45, blue: 0.45))
                         ZStack {
@@ -751,11 +897,13 @@ struct MatchingGameView: View {
             }
             Spacer(minLength: 0)
             VStack(spacing: 10) {
-                if !store.learning.isEmpty {
+                if !store.words.isEmpty {
                     Button {
-                        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { startRound() }
+                        let early = store.sessionCount == 0
+                        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { startRound(early: early) }
                     } label: {
-                        Label("Vòng tiếp theo", systemImage: "arrow.right")
+                        Label(store.sessionCount > 0 ? "Vòng tiếp → còn \(store.sessionCount) từ" : "Ôn sớm tiếp",
+                              systemImage: "arrow.right")
                             .font(.headline)
                             .foregroundStyle(.white)
                             .frame(maxWidth: .infinity)
@@ -876,6 +1024,7 @@ enum VocabAPI {
         let correct: Int?
         let addedAt: String?
         let lastPracticed: String?
+        let dueAt: String?
     }
 
     private struct Envelope: Decodable {
@@ -896,9 +1045,10 @@ enum VocabAPI {
         return list.map { item in
             var word = VocabWord(zh: item.zh, py: item.py ?? "", vi: item.vi ?? "",
                                  hv: (item.hv?.isEmpty ?? true) ? nil : item.hv)
-            word.correct = min(max(0, item.correct ?? 0), VocabularyStore.target)
+            word.correct = min(max(0, item.correct ?? 0), VocabularyStore.maxStage)
             word.addedAt = date(item.addedAt) ?? Date()
             word.lastPracticed = date(item.lastPracticed)
+            word.dueAt = date(item.dueAt)
             return word
         }
     }
